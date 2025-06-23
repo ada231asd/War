@@ -3,7 +3,7 @@
     <div class="header-container">
       <div class="logo">
         <router-link to="/">
-          <img src="../assets/images/logo.svg" alt="ThunderCraft" class="logo-image">
+          <img src="../assets/images/logo.png" alt="ThunderCraft" class="logo-image">
           <span class="logo-text">ThunderCraft</span>
         </router-link>
       </div>
@@ -16,7 +16,7 @@
         <router-link to="/blog" class="nav-link">Блог</router-link>
       </nav>
 
-      <div class="auth-buttons">
+      <!-- <div class="auth-buttons">
         <button class="auth-btn steam">
           <img src="../assets/images/steam-icon.svg" alt="Steam">
           Войти через Steam
@@ -29,7 +29,7 @@
           <img src="../assets/images/discord-icon.svg" alt="Discord">
           Войти через Discord
         </button>
-      </div>
+      </div> -->
 
       <button class="menu-toggle" @click="toggleMenu">
         <span></span>
