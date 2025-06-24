@@ -3,7 +3,7 @@
     <div class="footer-container">
       <div class="footer-main">
         <div class="footer-brand">
-          <img src="../assets/images/logo.svg" alt="ThunderCraft" class="footer-logo">
+          <img src="../assets/images/logo.png" alt="ThunderCraft" class="footer-logo">
           <p class="footer-description">
             Сообщество разработчиков и энтузиастов War Thunder, создающих уникальные прицелы и скины
           </p>
