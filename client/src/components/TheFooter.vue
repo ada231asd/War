@@ -72,9 +72,10 @@ const handleSubscribe = () => {
 
 <style lang="scss">
 .the-footer {
-  background: #1a1a1a;
-  color: #fff;
+  background: #CAD5DC;
+  color: #5A6D76;
   padding: 4rem 0 2rem;
+  box-shadow: 0 -2px 8px rgba(90,109,118,0.2);
 
   .footer-container {
     max-width: 1200px;
@@ -96,7 +97,7 @@ const handleSubscribe = () => {
     }
 
     .footer-description {
-      color: #999;
+      color: #5A6D76;
       line-height: 1.6;
     }
   }
@@ -109,20 +110,20 @@ const handleSubscribe = () => {
 
   .footer-section {
     h3 {
-      color: #ffd700;
+      color: #4B9FAF;
       margin-bottom: 1.5rem;
       font-size: 1.2rem;
     }
 
     a {
       display: block;
-      color: #fff;
+      color: #4B9FAF;
       text-decoration: none;
       margin-bottom: 0.8rem;
-      transition: color 0.3s ease;
+      transition: color 0.3s;
 
       &:hover {
-        color: #ffd700;
+        color: #5BB9B2;
       }
     }
 
@@ -139,10 +140,10 @@ const handleSubscribe = () => {
   }
 
   .footer-bottom {
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid #5BB9B2;
     padding-top: 2rem;
     text-align: center;
-    color: #666;
+    color: #5A6D76;
 
     p {
       margin: 0.5rem 0;

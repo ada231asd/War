@@ -90,68 +90,73 @@
 
 <style lang="scss">
 .privacy-view {
+  background: #E1E8EC;
+  min-height: 100vh;
   .privacy-header {
-    background: linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)),
-                url('../assets/images/privacy-header-bg.jpg') center/cover;
-    color: #fff;
+    background: linear-gradient(rgba(202, 213, 220, 0.85), rgba(225, 232, 236, 0.95)), url('../assets/images/privacy-header-bg.jpg') center/cover;
+    color: #5A6D76;
     padding: 4rem 2rem;
     text-align: center;
-
     h1 {
       font-size: 3rem;
       margin-bottom: 1rem;
       font-family: 'War Thunder', sans-serif;
+      color: #4B9FAF;
     }
-
     p {
       font-size: 1.25rem;
-      opacity: 0.9;
+      opacity: 0.95;
+      color: #5A6D76;
     }
   }
-
   .privacy-content {
     padding: 4rem 2rem;
-    background: #1a1a1a;
-    color: #fff;
-
+    background: #CAD5DC;
+    color: #5A6D76;
     .privacy-container {
       max-width: 800px;
       margin: 0 auto;
     }
-
     .privacy-section {
       margin-bottom: 3rem;
-
+      background: #E1E8EC;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(90,109,118,0.2);
+      padding: 2rem;
       h2 {
-        color: #ffd700;
+        color: #4B9FAF;
         margin-bottom: 1.5rem;
         font-size: 1.8rem;
       }
-
       p {
-        color: #999;
+        color: #5A6D76;
         margin-bottom: 1rem;
         line-height: 1.6;
       }
-
       ul {
         list-style: none;
         padding: 0;
         margin: 0;
-
         li {
-          color: #999;
+          color: #5A6D76;
           margin-bottom: 0.75rem;
           padding-left: 1.5rem;
           position: relative;
           line-height: 1.6;
-
           &:before {
             content: "•";
-            color: #ffd700;
+            color: #5BB9B2;
             position: absolute;
             left: 0;
           }
+        }
+      }
+      a {
+        color: #4B9FAF;
+        text-decoration: underline;
+        transition: color 0.3s;
+        &:hover {
+          color: #5BB9B2;
         }
       }
     }

@@ -23,13 +23,16 @@ defineProps({
 
 <style scoped lang="scss">
 .blog-post {
-  background: rgba(255, 255, 255, 0.05);
+  background: #E1E8EC;
   border-radius: 8px;
+  border: 1.5px solid #CAD5DC;
   overflow: hidden;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, background 0.3s, color 0.3s;
+  box-shadow: 0 2px 8px rgba(90,109,118,0.2);
 
   &:hover {
     transform: translateY(-5px);
+    background: #CAD5DC;
   }
 
   .post-image {
@@ -54,11 +57,11 @@ defineProps({
     h2 {
       font-size: 1.5rem;
       margin-bottom: 1rem;
-      color: #ffd700;
+      color: #4B9FAF;
     }
 
     .post-excerpt {
-      color: #999;
+      color: #5A6D76;
       margin-bottom: 1rem;
       line-height: 1.6;
     }
@@ -68,22 +71,22 @@ defineProps({
       gap: 1rem;
       margin-bottom: 1rem;
       font-size: 0.9rem;
-      color: #666;
+      color: #5A6D76;
 
       .post-category {
-        color: #ffd700;
+        color: #5BB9B2;
       }
     }
 
     .read-more {
       display: inline-block;
-      color: #ffd700;
+      color: #4B9FAF;
       text-decoration: none;
       font-weight: 500;
       transition: color 0.3s ease;
 
       &:hover {
-        color: #ffed4a;
+        color: #5BB9B2;
       }
     }
   }

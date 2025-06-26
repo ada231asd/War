@@ -45,10 +45,20 @@ const posts = ref([
 
 <style lang="scss">
 .blog-view {
+  background: #E1E8EC;
+  min-height: 100vh;
   .blog-content {
     padding: 4rem 2rem;
-    background: #1a1a1a;
-    color: #fff;
+    background: #CAD5DC;
+    color: #5A6D76;
+    border-radius: 12px;
+    box-shadow: 0 2px 16px rgba(90,109,118,0.2);
+    h2, h3 {
+      color: #4B9FAF;
+    }
+    p {
+      color: #5A6D76;
+    }
   }
 }
 </style> 

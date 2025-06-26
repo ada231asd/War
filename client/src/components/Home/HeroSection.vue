@@ -22,9 +22,9 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
+  background: linear-gradient(rgba(202, 213, 220, 0.85), rgba(225, 232, 236, 0.95)),
               url('@/assets/images/hero-bg.jpg') center/cover;
-  color: #fff;
+  color: #5A6D76;
 
   .hero-content {
     max-width: 800px;
@@ -34,12 +34,14 @@
       font-size: 3rem;
       margin-bottom: 1rem;
       font-family: 'War Thunder', sans-serif;
+      color: #4B9FAF;
     }
 
     p {
       font-size: 1.25rem;
       margin-bottom: 2rem;
-      opacity: 0.9;
+      opacity: 0.95;
+      color: #5A6D76;
     }
   }
 
@@ -54,24 +56,27 @@
       text-decoration: none;
       font-weight: 500;
       transition: all 0.3s ease;
+      font-size: 1.1rem;
+      box-shadow: 0 2px 8px rgba(90,109,118,0.2);
 
       &.btn-primary {
-        background: #ffd700;
-        color: #000;
-
+        background: #4B9FAF;
+        color: #fff;
+        border: none;
         &:hover {
-          background: #ffed4a;
+          background: #5BB9B2;
+          color: #fff;
           transform: translateY(-2px);
         }
       }
 
       &.btn-secondary {
-        background: transparent;
-        border: 2px solid #ffd700;
-        color: #ffd700;
-
+        background: #CAD5DC;
+        border: 2px solid #4B9FAF;
+        color: #5A6D76;
         &:hover {
-          background: rgba(255, 215, 0, 0.1);
+          background: #5BB9B2;
+          color: #fff;
           transform: translateY(-2px);
         }
       }

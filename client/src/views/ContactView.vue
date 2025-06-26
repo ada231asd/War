@@ -130,30 +130,29 @@ const submitForm = async () => {
 
 <style lang="scss">
 .contact-view {
+  background: #E1E8EC;
+  min-height: 100vh;
   .contact-header {
-    background: linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)),
-                url('../assets/images/contact-header-bg.jpg') center/cover;
-    color: #fff;
+    background: linear-gradient(rgba(202, 213, 220, 0.85), rgba(225, 232, 236, 0.95)), url('../assets/images/contact-header-bg.jpg') center/cover;
+    color: #5A6D76;
     padding: 4rem 2rem;
     text-align: center;
-
     h1 {
       font-size: 3rem;
       margin-bottom: 1rem;
       font-family: 'War Thunder', sans-serif;
+      color: #4B9FAF;
     }
-
     p {
       font-size: 1.25rem;
-      opacity: 0.9;
+      opacity: 0.95;
+      color: #5A6D76;
     }
   }
-
   .contact-content {
     padding: 4rem 2rem;
-    background: #1a1a1a;
-    color: #fff;
-
+    background: #CAD5DC;
+    color: #5A6D76;
     .contact-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -161,142 +160,97 @@ const submitForm = async () => {
       max-width: 1200px;
       margin: 0 auto;
     }
-
     .contact-info {
       h2 {
-        color: #ffd700;
+        color: #4B9FAF;
         margin-bottom: 2rem;
         font-size: 2rem;
       }
-
       .info-items {
         display: grid;
         gap: 2rem;
       }
-
       .info-item {
-        background: rgba(255, 255, 255, 0.05);
+        background: #E1E8EC;
         padding: 2rem;
         border-radius: 8px;
-
+        box-shadow: 0 2px 8px rgba(90,109,118,0.2);
         h3 {
-          color: #ffd700;
+          color: #4B9FAF;
           margin-bottom: 1rem;
           font-size: 1.5rem;
         }
-
         p {
-          color: #999;
+          color: #5A6D76;
           margin-bottom: 1.5rem;
           line-height: 1.6;
         }
-
         .btn {
           display: inline-flex;
           align-items: center;
           gap: 0.5rem;
           padding: 0.75rem 1.5rem;
-          background: rgba(255, 255, 255, 0.1);
+          background: #4B9FAF;
           color: #fff;
-          text-decoration: none;
           border-radius: 4px;
-          transition: all 0.3s ease;
-
-          img {
-            width: 24px;
-            height: 24px;
-          }
-
+          font-weight: 500;
+          transition: background 0.3s, color 0.3s, transform 0.3s;
           &:hover {
-            background: rgba(255, 255, 255, 0.2);
+            background: #5BB9B2;
+            color: #fff;
             transform: translateY(-2px);
-          }
-
-          &.btn-discord {
-            background: #7289da;
-            &:hover { background: #677bc4; }
-          }
-
-          &.btn-vk {
-            background: #4c75a3;
-            &:hover { background: #3b5998; }
-          }
-
-          &.btn-email {
-            background: #ffd700;
-            color: #000;
-            &:hover { background: #ffed4a; }
           }
         }
       }
     }
-
     .contact-form {
+      background: #E1E8EC;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(90,109,118,0.2);
+      padding: 2rem;
       h2 {
-        color: #ffd700;
+        color: #4B9FAF;
         margin-bottom: 2rem;
-        font-size: 2rem;
       }
-
       .form-group {
         margin-bottom: 1.5rem;
-
         label {
           display: block;
           margin-bottom: 0.5rem;
-          color: #fff;
+          color: #5A6D76;
         }
-
-        input,
-        select,
-        textarea {
+        input, select, textarea {
           width: 100%;
-          padding: 0.75rem;
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
+          padding: 0.75rem 1rem;
           border-radius: 4px;
-          color: #fff;
+          border: 1px solid #4B9FAF;
+          color: #5A6D76;
+          background: #CAD5DC;
           font-size: 1rem;
-
-          &::placeholder {
-            color: rgba(255, 255, 255, 0.5);
-          }
-
+          transition: border 0.3s;
           &:focus {
             outline: none;
-            border-color: #ffd700;
+            border-color: #5BB9B2;
           }
         }
-
-        select {
-          appearance: none;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffd700' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-          background-repeat: no-repeat;
-          background-position: right 0.75rem center;
-          background-size: 1rem;
-          padding-right: 2.5rem;
-        }
       }
-
       .btn-primary {
-        width: 100%;
-        padding: 1rem;
-        background: #ffd700;
-        color: #000;
-        border: none;
+        background: #4B9FAF;
+        color: #fff;
         border-radius: 4px;
-        font-size: 1rem;
+        padding: 1rem 2rem;
         font-weight: 500;
-        cursor: pointer;
-        transition: all 0.3s ease;
-
-        &:hover:not(:disabled) {
-          background: #ffed4a;
+        font-size: 1.1rem;
+        border: none;
+        box-shadow: 0 2px 8px rgba(90,109,118,0.2);
+        transition: background 0.3s, color 0.3s, transform 0.3s;
+        &:hover {
+          background: #5BB9B2;
+          color: #fff;
           transform: translateY(-2px);
         }
-
         &:disabled {
-          opacity: 0.7;
+          opacity: 0.5;
           cursor: not-allowed;
         }
       }

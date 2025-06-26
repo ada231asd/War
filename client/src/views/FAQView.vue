@@ -128,151 +128,135 @@ const toggleFAQ = (faq) => {
 
 <style lang="scss">
 .faq-view {
+  background: #E1E8EC;
+  min-height: 100vh;
   .faq-header {
-    background: linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)),
-                url('../assets/images/faq-header-bg.jpg') center/cover;
-    color: #fff;
+    background: linear-gradient(rgba(202, 213, 220, 0.85), rgba(225, 232, 236, 0.95)), url('../assets/images/faq-header-bg.jpg') center/cover;
+    color: #5A6D76;
     padding: 4rem 2rem;
     text-align: center;
-
     h1 {
       font-size: 3rem;
       margin-bottom: 1rem;
       font-family: 'War Thunder', sans-serif;
+      color: #4B9FAF;
     }
-
     p {
       font-size: 1.25rem;
-      opacity: 0.9;
+      opacity: 0.95;
+      color: #5A6D76;
     }
   }
-
   .faq-content {
     padding: 4rem 2rem;
-    background: #1a1a1a;
-    color: #fff;
+    background: #CAD5DC;
+    color: #5A6D76;
     max-width: 1200px;
     margin: 0 auto;
-
+    border-radius: 12px;
+    box-shadow: 0 2px 16px rgba(90,109,118,0.2);
     .faq-search {
       margin-bottom: 2rem;
-
       input {
         width: 100%;
         padding: 1rem;
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: #E1E8EC;
+        border: 1px solid #4B9FAF;
         border-radius: 4px;
-        color: #fff;
+        color: #5A6D76;
         font-size: 1rem;
-
         &::placeholder {
-          color: rgba(255, 255, 255, 0.5);
+          color: #A7B0B8;
         }
-
         &:focus {
           outline: none;
-          border-color: #ffd700;
+          border-color: #5BB9B2;
         }
       }
     }
-
     .faq-categories {
       display: flex;
       flex-wrap: wrap;
       gap: 1rem;
       margin-bottom: 3rem;
-
       .category-btn {
         padding: 0.75rem 1.5rem;
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: #E1E8EC;
+        border: 1px solid #CAD5DC;
         border-radius: 4px;
-        color: #fff;
+        color: #5A6D76;
         cursor: pointer;
-        transition: all 0.3s ease;
-
-        &:hover {
-          background: rgba(255, 255, 255, 0.2);
-        }
-
-        &.active {
-          background: #ffd700;
-          color: #000;
-          border-color: #ffd700;
+        transition: background 0.3s, color 0.3s, border 0.3s;
+        &:hover, &.active {
+          background: #5BB9B2;
+          color: #fff;
+          border-color: #5BB9B2;
         }
       }
     }
-
     .faq-list {
       .faq-item {
-        margin-bottom: 1rem;
-        background: rgba(255, 255, 255, 0.05);
+        background: #E1E8EC;
         border-radius: 8px;
-        overflow: hidden;
-
+        box-shadow: 0 2px 8px rgba(90,109,118,0.2);
+        margin-bottom: 1.5rem;
+        transition: background 0.3s, color 0.3s;
+        &.is-open {
+          background: #CAD5DC;
+        }
         .faq-question {
-          padding: 1.5rem;
           display: flex;
-          justify-content: space-between;
           align-items: center;
+          justify-content: space-between;
           cursor: pointer;
-          transition: background-color 0.3s ease;
-
-          &:hover {
-            background: rgba(255, 255, 255, 0.1);
-          }
-
+          padding: 1.2rem 1.5rem;
           h3 {
+            color: #4B9FAF;
+            font-size: 1.1rem;
             margin: 0;
-            font-size: 1.2rem;
-            color: #ffd700;
           }
-
           .toggle-icon {
             font-size: 1.5rem;
-            color: #ffd700;
+            color: #5BB9B2;
           }
         }
-
         .faq-answer {
-          padding: 0 1.5rem 1.5rem;
-          color: #999;
-          line-height: 1.6;
+          padding: 1.2rem 1.5rem 1.5rem 1.5rem;
+          p {
+            color: #5A6D76;
+            margin: 0;
+          }
         }
       }
     }
-
     .faq-contact {
-      margin-top: 4rem;
-      text-align: center;
-      padding: 3rem;
-      background: rgba(255, 255, 255, 0.05);
+      background: #E1E8EC;
       border-radius: 8px;
-
+      box-shadow: 0 2px 8px rgba(90,109,118,0.2);
+      margin-top: 2rem;
+      padding: 2rem;
+      text-align: center;
       h2 {
-        color: #ffd700;
+        color: #4B9FAF;
         margin-bottom: 1rem;
-        font-size: 2rem;
       }
-
       p {
-        color: #999;
-        margin-bottom: 2rem;
+        color: #5A6D76;
+        margin-bottom: 1.5rem;
       }
-
-      .btn {
-        display: inline-block;
-        padding: 0.75rem 1.5rem;
-        background: #ffd700;
-        color: #000;
-        text-decoration: none;
+      .btn-primary {
+        background: #4B9FAF;
+        color: #fff;
         border-radius: 4px;
+        padding: 1rem 2rem;
         font-weight: 500;
-        transition: all 0.3s ease;
-
+        font-size: 1.1rem;
+        border: none;
+        box-shadow: 0 2px 8px rgba(90,109,118,0.2);
+        transition: background 0.3s, color 0.3s, transform 0.3s;
         &:hover {
-          background: #ffed4a;
+          background: #5BB9B2;
+          color: #fff;
           transform: translateY(-2px);
         }
       }

@@ -22,24 +22,27 @@ import NewsSection from '@/components/Home/NewsSection.vue'
 
 <style lang="scss">
 .home-view {
-  // Основные стили перенесены в компоненты
+  background: #E1E8EC;
+  min-height: 100vh;
   .about-section {
-    background: #23272f;
-    color: #fff;
+    background: #CAD5DC;
+    color: #5A6D76;
     padding: 3rem 2rem;
     max-width: 900px;
     margin: 0 auto 3rem auto;
     border-radius: 12px;
-    box-shadow: 0 2px 16px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 16px rgba(90,109,118,0.2);
     h2 {
       font-size: 2rem;
       margin-bottom: 1.5rem;
       text-align: center;
+      color: #4B9FAF;
     }
     p {
       font-size: 1.2rem;
       line-height: 1.7;
       text-align: center;
+      color: #5A6D76;
     }
   }
 }

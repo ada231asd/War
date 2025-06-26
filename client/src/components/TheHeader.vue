@@ -52,14 +52,15 @@ const toggleMenu = () => {
 
 <style lang="scss">
 .the-header {
-  background: rgba(0, 0, 0, 0.9);
+  background: rgba(202, 213, 220, 0.95);
   backdrop-filter: blur(10px);
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1.5px solid #5BB9B2;
+  box-shadow: 0 2px 8px rgba(90,109,118,0.2);
 
   .header-container {
     max-width: 1200px;
@@ -75,7 +76,7 @@ const toggleMenu = () => {
       display: flex;
       align-items: center;
       text-decoration: none;
-      color: #fff;
+      color: #4B9FAF;
     }
 
     .logo-image {
@@ -87,10 +88,9 @@ const toggleMenu = () => {
       font-family: 'War Thunder', sans-serif;
       font-size: 1.5rem;
       text-transform: uppercase;
-      background: linear-gradient(45deg, #ffd700, #ff8c00);
-      background-clip: text;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      color: #4B9FAF;
+      background: none;
+      -webkit-text-fill-color: initial;
     }
   }
 
@@ -99,17 +99,17 @@ const toggleMenu = () => {
     gap: 2rem;
 
     .nav-link {
-      color: #fff;
+      color: #5A6D76;
       text-decoration: none;
       font-weight: 500;
-      transition: color 0.3s ease;
+      transition: color 0.3s;
 
       &:hover {
-        color: #ffd700;
+        color: #5BB9B2;
       }
 
       &.router-link-active {
-        color: #ffd700;
+        color: #5BB9B2;
       }
     }
   }
@@ -169,8 +169,8 @@ const toggleMenu = () => {
       display: block;
       width: 25px;
       height: 2px;
-      background: #fff;
-      transition: all 0.3s ease;
+      background: #4B9FAF;
+      transition: all 0.3s;
     }
   }
 }
@@ -198,20 +198,12 @@ const toggleMenu = () => {
       top: 70px;
       left: 0;
       right: 0;
-      background: rgba(0, 0, 0, 0.95);
-      padding: 1rem;
+      background: #CAD5DC;
       flex-direction: column;
-      align-items: center;
-      transform: translateY(-100%);
-      opacity: 0;
-      visibility: hidden;
-      transition: all 0.3s ease;
-
-      &.is-open {
-        transform: translateY(0);
-        opacity: 1;
-        visibility: visible;
-      }
+      gap: 1.5rem;
+      padding: 2rem 0;
+      z-index: 1001;
+      box-shadow: 0 2px 8px rgba(90,109,118,0.2);
     }
 
     .auth-buttons {

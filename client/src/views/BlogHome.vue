@@ -128,160 +128,290 @@ const selectCategory = (categoryId) => {
 
 <style lang="scss">
 .blog-home {
+  background: #E1E8EC;
+  min-height: 100vh;
   .hero-section {
     min-height: 600px;
-    background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
-                url('/images/hero-bg.jpg') center/cover;
+    background: linear-gradient(rgba(202, 213, 220, 0.85), rgba(225, 232, 236, 0.95)), url('/images/hero-bg.jpg') center/cover;
     display: flex;
     align-items: center;
     justify-content: center;
     text-align: center;
-    color: #fff;
+    color: #5A6D76;
     padding: 2rem;
-
     .hero-content {
       max-width: 800px;
     }
-
     .hero-title {
       font-size: 3rem;
       margin-bottom: 1rem;
       font-family: 'War Thunder', sans-serif;
       text-transform: uppercase;
+      color: #4B9FAF;
     }
-
     .hero-subtitle {
       font-size: 1.5rem;
       margin-bottom: 2rem;
-      opacity: 0.9;
+      opacity: 0.95;
+      color: #5A6D76;
     }
-
     .hero-buttons {
       display: flex;
       gap: 1rem;
       justify-content: center;
+      .btn {
+        background: #4B9FAF;
+        color: #fff;
+        border-radius: 4px;
+        padding: 1rem 2rem;
+        font-weight: 500;
+        font-size: 1.1rem;
+        border: none;
+        box-shadow: 0 2px 8px rgba(90,109,118,0.2);
+        transition: background 0.3s, color 0.3s, transform 0.3s;
+        &:hover {
+          background: #5BB9B2;
+          color: #fff;
+          transform: translateY(-2px);
+        }
+      }
+      .btn-secondary {
+        background: #CAD5DC;
+        color: #5A6D76;
+        border: 2px solid #4B9FAF;
+        &:hover {
+          background: #5BB9B2;
+          color: #fff;
+        }
+      }
     }
   }
-
   .section-title {
     font-size: 2rem;
     margin-bottom: 2rem;
     text-align: center;
-    color: #333;
+    color: #4B9FAF;
   }
-
   .posts-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 2rem;
     padding: 2rem;
   }
-
   .post-card {
-    background: #fff;
+    background: #E1E8EC;
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transition: transform 0.3s ease;
-
+    box-shadow: 0 4px 6px rgba(90,109,118,0.2);
+    transition: transform 0.3s ease, background 0.3s, color 0.3s;
     &:hover {
       transform: translateY(-5px);
+      background: #CAD5DC;
     }
-
     .post-image {
       height: 200px;
       overflow: hidden;
-
       img {
         width: 100%;
         height: 100%;
         object-fit: cover;
       }
     }
-
     .post-content {
       padding: 1.5rem;
-    }
-
-    .post-title {
-      font-size: 1.25rem;
-      margin-bottom: 1rem;
-    }
-
-    .post-meta {
-      display: flex;
-      gap: 1rem;
-      font-size: 0.875rem;
-      color: #666;
-      margin: 1rem 0;
+      .post-title {
+        color: #4B9FAF;
+        font-size: 1.3rem;
+        margin-bottom: 0.5rem;
+      }
+      .post-excerpt {
+        color: #5A6D76;
+        margin-bottom: 1rem;
+      }
+      .post-meta {
+        color: #5A6D76;
+        font-size: 0.95rem;
+        margin-bottom: 1rem;
+        span {
+          margin-right: 1rem;
+        }
+      }
+      .btn-text {
+        background: none;
+        color: #4B9FAF;
+        border: none;
+        cursor: pointer;
+        font-weight: 500;
+        transition: color 0.3s;
+        &:hover {
+          color: #5BB9B2;
+        }
+      }
     }
   }
-
+  .featured-posts, .recent-news, .blog-categories {
+    background: #CAD5DC;
+    border-radius: 12px;
+    box-shadow: 0 2px 16px rgba(90,109,118,0.2);
+    margin: 2rem auto;
+    max-width: 1200px;
+    padding: 2rem;
+  }
+  .news-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    .news-item {
+      background: #E1E8EC;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(90,109,118,0.2);
+      padding: 1.5rem;
+      .news-title {
+        color: #4B9FAF;
+        font-size: 1.2rem;
+        margin-bottom: 0.5rem;
+      }
+      .news-excerpt {
+        color: #5A6D76;
+        margin-bottom: 0.5rem;
+      }
+      .news-meta {
+        color: #5A6D76;
+        font-size: 0.95rem;
+        .news-date {
+          color: #5BB9B2;
+          margin-right: 1rem;
+        }
+        .btn-text {
+          background: none;
+          color: #4B9FAF;
+          border: none;
+          cursor: pointer;
+          font-weight: 500;
+          transition: color 0.3s;
+          &:hover {
+            color: #5BB9B2;
+          }
+        }
+      }
+    }
+  }
+  .btn-outline {
+    background: none;
+    color: #4B9FAF;
+    border: 2px solid #4B9FAF;
+    border-radius: 4px;
+    padding: 0.75rem 2rem;
+    font-weight: 500;
+    transition: background 0.3s, color 0.3s;
+    margin: 2rem auto 0 auto;
+    display: block;
+    &:hover {
+      background: #5BB9B2;
+      color: #fff;
+    }
+  }
   .categories-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 1rem;
-    padding: 2rem;
-  }
-
-  .category-btn {
-    padding: 1rem;
-    border: none;
-    border-radius: 4px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.3s ease;
-
-    &.category-news { background: #4a90e2; }
-    &.category-guides { background: #2ecc71; }
-    &.category-skins { background: #e74c3c; }
-    &.category-contests { background: #f1c40f; }
-    &.category-history { background: #95a5a6; }
-    &.category-community { background: #9b59b6; }
-
-    &:hover {
-      transform: scale(1.05);
+    .category-btn {
+      background: #E1E8EC;
+      color: #5A6D76;
+      border: 2px solid #CAD5DC;
+      border-radius: 6px;
+      padding: 0.75rem 1.5rem;
+      font-weight: 500;
+      font-size: 1rem;
+      transition: background 0.3s, color 0.3s, border 0.3s;
+      cursor: pointer;
+      &:hover, &.active {
+        background: #5BB9B2;
+        color: #fff;
+        border-color: #5BB9B2;
+      }
     }
   }
-
-  .news-list {
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 2rem;
-  }
-
-  .news-item {
-    padding: 1.5rem;
-    border-bottom: 1px solid #eee;
-
-    &:last-child {
-      border-bottom: none;
-    }
-  }
-
   .community-cta {
-    background: linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)),
-                url('/images/community-bg.jpg') center/cover;
-    color: #fff;
+    background: linear-gradient(rgba(202, 213, 220, 0.85), rgba(225, 232, 236, 0.95)), url('/images/community-bg.jpg') center/cover;
+    color: #5A6D76;
     padding: 4rem 2rem;
     text-align: center;
-
+    border-radius: 12px;
+    box-shadow: 0 2px 16px rgba(90,109,118,0.2);
     .cta-content {
       max-width: 800px;
       margin: 0 auto;
     }
-
+    .cta-title {
+      color: #4B9FAF;
+      font-size: 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .cta-text {
+      color: #5A6D76;
+      font-size: 1.2rem;
+      margin-bottom: 2rem;
+    }
     .cta-buttons {
       display: flex;
       gap: 1rem;
       justify-content: center;
       margin: 2rem 0;
+      .btn-primary {
+        background: #4B9FAF;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 1rem 2rem;
+        font-weight: 500;
+        font-size: 1.1rem;
+        box-shadow: 0 2px 8px rgba(90,109,118,0.2);
+        transition: background 0.3s, color 0.3s, transform 0.3s;
+        &:hover {
+          background: #5BB9B2;
+          color: #fff;
+          transform: translateY(-2px);
+        }
+      }
+      .btn-secondary {
+        background: #CAD5DC;
+        color: #5A6D76;
+        border: 2px solid #4B9FAF;
+        border-radius: 4px;
+        padding: 1rem 2rem;
+        font-weight: 500;
+        font-size: 1.1rem;
+        transition: background 0.3s, color 0.3s;
+        &:hover {
+          background: #5BB9B2;
+          color: #fff;
+        }
+      }
     }
-
     .social-share {
       display: flex;
       gap: 1rem;
       justify-content: center;
+      margin-top: 2rem;
+      .social-btn {
+        background: #E1E8EC;
+        color: #4B9FAF;
+        border: none;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.3s, color 0.3s;
+        cursor: pointer;
+        &:hover {
+          background: #5BB9B2;
+          color: #fff;
+        }
+      }
     }
   }
 }

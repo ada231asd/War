@@ -464,31 +464,30 @@ onMounted(() => {
 
 <style lang="scss">
 .sight-editor-view {
+  background: #E1E8EC;
+  min-height: 100vh;
   .editor-header {
-    background: linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)),
-                url('../assets/images/sight-editor-bg.jpg') center/cover;
-    color: #fff;
+    background: linear-gradient(rgba(202, 213, 220, 0.85), rgba(225, 232, 236, 0.95)), url('../assets/images/sight-editor-bg.jpg') center/cover;
+    color: #5A6D76;
     padding: 4rem 2rem;
     text-align: center;
-
     h1 {
       font-size: 3rem;
       margin-bottom: 1rem;
       font-family: 'War Thunder', sans-serif;
+      color: #4B9FAF;
     }
-
     p {
       font-size: 1.25rem;
-      opacity: 0.9;
+      opacity: 0.95;
+      color: #5A6D76;
     }
   }
-
   .editor-content {
     padding: 2rem;
-    background: #1a1a1a;
-    color: #fff;
+    background: #CAD5DC;
+    color: #5A6D76;
     min-height: calc(100vh - 300px);
-
     .editor-container {
       display: grid;
       grid-template-columns: 300px 1fr 220px;
@@ -497,129 +496,116 @@ onMounted(() => {
       margin: 0 auto;
     }
   }
-
   .editor-sidebar {
-    background: rgba(255, 255, 255, 0.05);
+    background: #E1E8EC;
     border-radius: 8px;
     padding: 1.5rem;
-
+    box-shadow: 0 2px 8px rgba(90,109,118,0.2);
     .sidebar-section {
       margin-bottom: 2rem;
-
       h3 {
-        color: #ffd700;
+        color: #4B9FAF;
         margin-bottom: 1rem;
         font-size: 1.2rem;
       }
     }
-
     .setting-group {
       margin-bottom: 1rem;
-
       label {
         display: block;
         margin-bottom: 0.5rem;
-        color: #999;
+        color: #5A6D76;
       }
-
       .color-picker {
         width: 100%;
         height: 40px;
         border: none;
         border-radius: 4px;
-        background: rgba(255, 255, 255, 0.1);
+        background: #CAD5DC;
         cursor: pointer;
       }
-
       .range-slider {
         width: 100%;
         height: 6px;
         -webkit-appearance: none;
-        background: rgba(255, 255, 255, 0.1);
+        background: #CAD5DC;
         border-radius: 3px;
         outline: none;
-
         &::-webkit-slider-thumb {
           -webkit-appearance: none;
           width: 18px;
           height: 18px;
-          background: #ffd700;
+          background: #5BB9B2;
           border-radius: 50%;
           cursor: pointer;
         }
       }
     }
-
     .checkbox-group {
       margin-bottom: 0.8rem;
-
       label {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        color: #999;
+        color: #5A6D76;
         cursor: pointer;
-
         input[type="checkbox"] {
           width: 18px;
           height: 18px;
-          border: 2px solid #ffd700;
+          border: 2px solid #4B9FAF;
           border-radius: 4px;
-          background: transparent;
+          background: #E1E8EC;
           cursor: pointer;
         }
       }
     }
-
     .editor-select {
       width: 100%;
       padding: 0.75rem;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: #CAD5DC;
+      border: 1px solid #4B9FAF;
       border-radius: 4px;
-      color: #fff;
+      color: #5A6D76;
       cursor: pointer;
-
       &:focus {
         outline: none;
-        border-color: #ffd700;
+        border-color: #5BB9B2;
       }
     }
   }
-
   .editor-preview {
-    background: rgba(255, 255, 255, 0.05);
+    background: #E1E8EC;
     border-radius: 8px;
     padding: 1.5rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
-
+    box-shadow: 0 2px 8px rgba(90,109,118,0.2);
     .tools-bar {
       display: flex;
       gap: 0.5rem;
       justify-content: center;
       margin-bottom: 1rem;
       .tool-btn {
-        background: rgba(255,255,255,0.08);
+        background: #CAD5DC;
         border: 2px solid transparent;
-        color: #fff;
+        color: #5A6D76;
         font-size: 1.3rem;
         border-radius: 6px;
         padding: 0.5rem 0.7rem;
         cursor: pointer;
-        transition: border 0.2s, background 0.2s;
+        transition: border 0.2s, background 0.2s, color 0.2s;
         &.active {
-          border-color: #ffd700;
-          background: rgba(255,215,0,0.12);
-          color: #ffd700;
+          border-color: #4B9FAF;
+          background: #5BB9B2;
+          color: #fff;
         }
         &:hover {
-          background: rgba(255,255,255,0.18);
+          background: #5BB9B2;
+          color: #fff;
         }
       }
     }
-
     .preview-container {
       flex: 1;
       display: flex;
@@ -628,33 +614,29 @@ onMounted(() => {
       background: #fff;
       border-radius: 4px;
       overflow: hidden;
-
       .preview-canvas {
         max-width: 100%;
         max-height: 100%;
       }
     }
-
     .preview-controls {
       display: flex;
       gap: 1rem;
       justify-content: center;
-
       .btn-icon {
         width: 40px;
         height: 40px;
         border: none;
         border-radius: 4px;
-        background: rgba(255, 255, 255, 0.1);
-        color: #fff;
+        background: #CAD5DC;
+        color: #4B9FAF;
         cursor: pointer;
         transition: all 0.3s ease;
-
         &:hover {
-          background: rgba(255, 255, 255, 0.2);
+          background: #5BB9B2;
+          color: #fff;
           transform: translateY(-2px);
         }
-
         .icon {
           font-size: 1.5rem;
           line-height: 1;
@@ -662,21 +644,21 @@ onMounted(() => {
       }
     }
   }
-
   .editor-layers {
-    background: rgba(255,255,255,0.05);
+    background: #E1E8EC;
     border-radius: 8px;
     padding: 1.5rem 1rem;
     min-width: 200px;
     display: flex;
     flex-direction: column;
     align-items: stretch;
+    box-shadow: 0 2px 8px rgba(90,109,118,0.2);
     .layers-panel {
       flex: 1;
       display: flex;
       flex-direction: column;
       h3 {
-        color: #ffd700;
+        color: #4B9FAF;
         margin-bottom: 1rem;
         font-size: 1.2rem;
         text-align: center;

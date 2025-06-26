@@ -34,14 +34,15 @@ const features = [
 <style lang="scss" scoped>
 .features {
   padding: 4rem 2rem;
-  background: #1a1a1a;
-  color: #fff;
+  background: #CAD5DC;
+  color: #5A6D76;
 
   h2 {
     text-align: center;
     font-size: 2.5rem;
     margin-bottom: 3rem;
     font-family: 'War Thunder', sans-serif;
+    color: #4B9FAF;
   }
 
   .features-grid {
