@@ -931,6 +931,8 @@ onMounted(() => {
         width: 100%;
         height: 6px;
         -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
         background: rgba(255, 255, 255, 0.1);
         border-radius: 3px;
         outline: none;
@@ -1217,6 +1219,8 @@ onMounted(() => {
   width: 100%;
   height: 7px;
   -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
   background: #444;
   border-radius: 4px;
   outline: none;
