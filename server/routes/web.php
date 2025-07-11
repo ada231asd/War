@@ -16,12 +16,3 @@ Route::get('/api/health', function () {
         'timestamp' => now()
     ]);
 });
-
-// API routes
-Route::prefix('api')->group(function () {
-    Route::get('/user', function () {
-        return response()->json([
-            'message' => 'User endpoint - requires authentication'
-        ]);
-    })->middleware('auth:sanctum');
-});
