@@ -18,5 +18,10 @@ export default defineConfig({
         implementation: sass
       }
     }
+  },
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8000'
+    }
   }
 })

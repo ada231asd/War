@@ -16,20 +16,14 @@
         <router-link to="/blog" class="nav-link">Блог</router-link>
       </nav>
 
-      <!-- <div class="auth-buttons">
-        <button class="auth-btn steam">
-          <img src="../assets/images/steam-icon.svg" alt="Steam">
-          Войти через Steam
-        </button>
-        <button class="auth-btn vk">
-          <img src="../assets/images/vk-icon.svg" alt="VK">
-          Войти через VK
-        </button>
-        <button class="auth-btn discord">
-          <img src="../assets/images/discord-icon.svg" alt="Discord">
-          Войти через Discord
-        </button>
-      </div> -->
+      <div v-if="!isAuth" class="auth-buttons">
+        <router-link to="/login" class="btn btn-primary">Войти</router-link>
+        <router-link to="/register" class="btn btn-secondary">Регистрация</router-link>
+      </div>
+      <div v-else class="user-info" @click="goProfile">
+        <div class="user-avatar"></div>
+        <span class="user-status">{{ user?.name || user?.email || 'Профиль' }}</span>
+      </div>
 
       <button class="menu-toggle" @click="toggleMenu">
         <span></span>
@@ -41,12 +35,55 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 
 const isMenuOpen = ref(false)
+const router = useRouter()
 
 const toggleMenu = () => {
   isMenuOpen.value = !isMenuOpen.value
+}
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? match[2] : null
+}
+
+const isAuth = ref(false)
+const user = ref(null)
+
+async function fetchUser() {
+  const token = getCookie('auth_token')
+  if (!token) {
+    isAuth.value = false
+    user.value = null
+    return
+  }
+  try {
+    const res = await fetch('/api/user', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (res.ok) {
+      user.value = await res.json()
+      isAuth.value = true
+    } else {
+      isAuth.value = false
+      user.value = null
+    }
+  } catch {
+    isAuth.value = false
+    user.value = null
+  }
+}
+
+onMounted(() => {
+  fetchUser()
+  // Можно добавить setInterval(fetchUser, 10000) для автообновления
+})
+
+function goProfile() {
+  router.push('/profile')
 }
 </script>
 
@@ -171,6 +208,27 @@ const toggleMenu = () => {
       height: 2px;
       background: #fff;
       transition: all 0.3s ease;
+    }
+  }
+
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #888;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .user-status {
+      color: #ffd700;
+      font-weight: 500;
+      font-size: 1.1rem;
     }
   }
 }

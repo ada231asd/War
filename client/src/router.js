@@ -50,6 +50,21 @@ const routes = [
     path: '/terms',
     name: 'Terms',
     component: () => import('./views/TermsView.vue')
+  },
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('./views/LoginView.vue')
+  },
+  {
+    path: '/register',
+    name: 'Register',
+    component: () => import('./views/RegisterView.vue')
+  },
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: () => import('./views/ProfileView.vue')
   }
 ]
 
