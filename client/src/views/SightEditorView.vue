@@ -3,29 +3,16 @@
     <div class="editor-area" ref="editorArea">
       <canvas id="mainCanvas" ref="mainCanvas" :width="canvasWidth" :height="1080"></canvas>
       
-      <div id="functionalMenu" class="menuIsland" style="left: 1em; top: 1em">
-        <hr id="functionalMenuDragger" size="10px" style="background-color: lightgray">
-        <span id="refUrlTitle"></span>: <input type="text" id="refUrl" value="">
-        <button id="loadRefButton">Загрузить</button>
-        <br>
-        <span id="refFileTitle"></span>: <input type="file" id="refFile">
-        <br>
-        <span id="sizeRefTitle"></span>: <input type="number" id="refSize" value="1" step="0.1" style="width: 4em"><br>
-        <span id="shiftRefTitle"></span>:
-        <input type="number" id="refShiftX" value="0" step="0.01" style="width: 4em">
-        <input type="number" id="refShiftY" value="0" step="0.01" style="width: 4em">
-        <br>
-        <span id="refOpacityTitle">Непрозрачность картинки</span>:<br><input id="refOpacityInput" type="range" value="0.5" min="0" max="1" step="0.01"><br>
-        <br><br>
-        <span id="saveFileNameTitle">Название файла</span>: <input type="text" id="saveFileName" value="sight"><br>
-        <button id="saveButton">Сохранить в файл</button>
-        <button id="loadButton">Загрузить из файла</button>
-        <input type="file" id="loadButtonInput" style="display: none">
-        <br>
-        <button id="autosaveManually">Принудительно автосохранить</button><span id="saveIcon" style="display:inline-block;width:1em;height:1em;background:#ccc;vertical-align:middle;border-radius:2px;"></span>
-        <br><br>
-        <button id="exportButton">Экспортировать</button>
-      </div>
+      <SightEditorMenu
+        @image-loaded="onImageLoaded"
+        @save="onSaveFile"
+        @file-loaded="onFileLoaded"
+        @export="onExportFile"
+        @autosave="onAutosave"
+        @set-opacity="setReferenceOpacity"
+        @reset-size="resetSelectedLayerSize"
+      />
+      
       <div id="toolsMenu" class="menuIsland" style="left: 1em; bottom: 1em;">
         <hr id="toolsMenuDragger" size="10px" style="background-color: lightgray; margin: 0">
         <span id="toolTitle">Инструмент</span>:<br>
@@ -66,12 +53,16 @@
         <br><a href="https://github.com/solawk/wtdraw" target="_blank">[GitHub]</a>
         <br><a href="https://boosty.to/solawk" target="_blank">[Boosty]</a>
       </div>
-      <div id="objectsMenu" class="menuIsland" style="right: 1em; top: 1em; max-height: 50%; display: flex; flex-direction: column">
-        <hr id="objectsMenuDragger" size="10px" style="background-color: lightgray; margin: 0">
-        <b id="objectsTitle">Объекты</b>
-        <div id="objectsList"></div>
-        <button id="clearButton">Очистить</button>
-      </div>
+      <LayersPanel
+        :layers="layers"
+        :selectedLayerId="selectedLayerId"
+        :selectedObjectId="selectedObjectId"
+        @select-layer="selectLayer"
+        @select-object="selectObject"
+        @add-layer="addLayer"
+        @edit-layer="openLayerSettings"
+        style="position: fixed; right: 2em; top: 2em;"
+      />
       <div id="infoMenu" class="menuIsland" style="right: 1em; bottom: 1em; text-align: center">
         <hr id="infoMenuDragger" size="10px" style="background-color: lightgray">
         <b id="selObjectTitle">Выбранный объект</b>
@@ -83,13 +74,29 @@
       </div>
       <a id="saver"></a>
     </div>
+    <!-- Модальное окно настроек слоя -->
+    <div v-if="showLayerSettings" class="modal-overlay">
+      <div class="modal-window">
+        <h3>Настройки слоя</h3>
+        <label>Прозрачность (0-100%):
+          <input type="number" v-model.number="layerSettingsOpacity" min="0" max="100" />
+        </label>
+        <div style="margin-top:1em; text-align:right;">
+          <button @click="applyLayerSettings">OK</button>
+          <button @click="closeLayerSettings">Отмена</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import editorConfig from '../sightEditor/config';
+import SightEditorMenu from '../components/sightEditor/SightEditorMenu.vue';
+import LayersPanel from '../components/sightEditor/LayersPanel.vue';
 export default {
   name: 'SightEditorView',
+  components: { SightEditorMenu, LayersPanel },
   data() {
     return {
       screenPos: { x: 0, y: 0.1 },
@@ -120,6 +127,16 @@ export default {
       canvasPullSensitivity: 1.5,
       canvasWidth: window.innerWidth,
       lastDragPos: null,
+      freeTransform: false,
+      isTransforming: false,
+      transformStart: null,
+      transformMode: null, // 'move' или 'resize'
+      layers: [],
+      selectedLayerId: null,
+      selectedObjectId: null,
+      showLayerSettings: false,
+      layerSettingsId: null,
+      layerSettingsOpacity: 100,
     };
   },
   mounted() {
@@ -131,10 +148,14 @@ export default {
     this.attachCanvasEvents();
     window.addEventListener('wheel', this.onWheel, { passive: false });
     this.render();
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
   },
   beforeUnmount() {
     window.removeEventListener('resize', this.updateCanvasSize);
     window.removeEventListener('wheel', this.onWheel);
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
   },
   methods: {
     el(id) {
@@ -231,16 +252,33 @@ export default {
       }
     },
     drawReference() {
-      if (this.reference == null) return;
-      const refAspectRatio = this.reference.width / this.reference.height;
-      const from = this.v2disposSight2v2canvas({ x: (-this.referenceSize / 2) * refAspectRatio + this.referenceX, y: (-this.referenceSize / 2) + this.referenceY });
-      const to = this.v2disposSight2v2canvas({ x: (this.referenceSize / 2) * refAspectRatio + this.referenceX, y: (this.referenceSize / 2) + this.referenceY });
-      this.ctx.globalAlpha = this.referenceOpacity;
-      try {
-        this.ctx.drawImage(this.reference, from.x, from.y, to.x - from.x, to.y - from.y);
-      } catch (e) {
-        this.reference = null;
-        alert('Картинка не найдена/не подходит!');
+      // Отрисовываем все фото-слои, но зелёная рамка и маркеры — только для выбранного
+      for (const layer of this.layers) {
+        if (!layer.img) continue;
+        const from = this.v2disposSight2v2canvas({ x: -layer.width / 2 + layer.shiftX, y: -layer.height / 2 + layer.shiftY });
+        const to = this.v2disposSight2v2canvas({ x: layer.width / 2 + layer.shiftX, y: layer.height / 2 + layer.shiftY });
+        this.ctx.globalAlpha = layer.opacity;
+        this.ctx.drawImage(layer.img, from.x, from.y, to.x - from.x, to.y - from.y);
+        // Зелёная рамка и маркеры только для выбранного слоя
+        if (this.selectedLayerId === layer.id) {
+          this.ctx.save();
+          this.ctx.globalAlpha = 1;
+          this.ctx.strokeStyle = '#00c800';
+          this.ctx.lineWidth = 4;
+          this.ctx.strokeRect(from.x, from.y, to.x - from.x, to.y - from.y);
+          // Маркеры трансформации
+          const handles = this.getTransformHandles(from, to);
+          for (const h of handles) {
+            this.ctx.beginPath();
+            this.ctx.arc(h.x, h.y, 7, 0, 2 * Math.PI);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fill();
+            this.ctx.strokeStyle = '#00c800';
+            this.ctx.lineWidth = 2;
+            this.ctx.stroke();
+          }
+          this.ctx.restore();
+        }
       }
       this.ctx.globalAlpha = 1;
     },
@@ -331,27 +369,81 @@ export default {
       // Для примера: пустая реализация, т.к. tool, drawing, snapping, quadPos и прочее не реализованы
     },
     onPointerDown(e) {
-      if (e.button === 2) {
-        this.dragging = true;
-        this.lastDragPos = { x: e.clientX, y: e.clientY };
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      let hit = false;
+      for (let i = this.layers.length - 1; i >= 0; i--) {
+        const layer = this.layers[i];
+        if (!layer.img) continue;
+        const from = this.v2disposSight2v2canvas({ x: -layer.width / 2 + layer.shiftX, y: -layer.height / 2 + layer.shiftY });
+        const to = this.v2disposSight2v2canvas({ x: layer.width / 2 + layer.shiftX, y: layer.height / 2 + layer.shiftY });
+        const handles = this.getTransformHandles(from, to);
+        for (const h of handles) {
+          if (mx >= h.x - 8 && mx <= h.x + 8 && my >= h.y - 8 && my <= h.y + 8) {
+            this.selectedLayerId = layer.id;
+            this.isTransforming = true;
+            this.transformMode = h.type;
+            this.transformStart = { x: mx, y: my, ...layer };
+            hit = true;
+            break;
+          }
+        }
+        if (hit) break;
+        if (mx >= from.x && mx <= to.x && my >= from.y && my <= to.y) {
+          this.selectedLayerId = layer.id;
+          this.isTransforming = true;
+          this.transformMode = 'move';
+          this.transformStart = { x: mx, y: my, ...layer };
+          hit = true;
+          break;
+        }
       }
-      // ... остальная логика (если есть)
+      if (!hit) {
+        this.selectedLayerId = null;
+      }
     },
     onPointerMove(e) {
-      if (this.dragging) {
-        const dx = (e.clientX - this.lastDragPos.x) / (this.screenZoom * 2000);
-        const dy = (e.clientY - this.lastDragPos.y) / (this.screenZoom * 2000);
-        this.screenPos.x -= dx;
-        this.screenPos.y -= dy;
-        this.lastDragPos = { x: e.clientX, y: e.clientY };
+      if (!this.isTransforming) return;
+      const layer = this.getSelectedLayer();
+      if (!layer) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const dx = (mx - this.transformStart.x) / (this.screenZoom * 2000);
+      const dy = (my - this.transformStart.y) / (this.screenZoom * 2000);
+      if (this.transformMode === 'move') {
+        layer.shiftX = this.transformStart.shiftX + dx;
+        layer.shiftY = this.transformStart.shiftY + dy;
+      } else if (this.transformMode === 'resize-l') {
+        layer.width = Math.max(0.05, this.transformStart.width - dx);
+      } else if (this.transformMode === 'resize-r') {
+        layer.width = Math.max(0.05, this.transformStart.width + dx);
+      } else if (this.transformMode === 'resize-t') {
+        layer.height = Math.max(0.05, this.transformStart.height - dy);
+      } else if (this.transformMode === 'resize-b') {
+        layer.height = Math.max(0.05, this.transformStart.height + dy);
+      } else if (this.transformMode === 'resize-tl') {
+        layer.width = Math.max(0.05, this.transformStart.width - dx);
+        layer.height = Math.max(0.05, this.transformStart.height - dy);
+      } else if (this.transformMode === 'resize-tr') {
+        layer.width = Math.max(0.05, this.transformStart.width + dx);
+        layer.height = Math.max(0.05, this.transformStart.height - dy);
+      } else if (this.transformMode === 'resize-bl') {
+        layer.width = Math.max(0.05, this.transformStart.width - dx);
+        layer.height = Math.max(0.05, this.transformStart.height + dy);
+      } else if (this.transformMode === 'resize-br') {
+        layer.width = Math.max(0.05, this.transformStart.width + dx);
+        layer.height = Math.max(0.05, this.transformStart.height + dy);
       }
-      // ... остальная логика (если есть)
+      this.reference = layer.img;
+      this.referenceSize = layer.size;
+      this.referenceX = layer.shiftX;
+      this.referenceY = layer.shiftY;
     },
     onPointerUp(e) {
-      if (e.button === 2) {
-        this.dragging = false;
-      }
-      // ... остальная логика (если есть)
+      this.isTransforming = false;
+      this.transformMode = null;
     },
     onWheel(e) {
       // Приближение только при зажатом Alt
@@ -379,17 +471,144 @@ export default {
         this.$refs.mainCanvas.height = 1080;
       }
     },
+    onImageLoaded(img, size, shiftX, shiftY) {
+      const layerId = 'layer' + (this.layers.length + 1);
+      // Вычисляем начальные width/height пропорционально картинке
+      const aspect = img.width / img.height;
+      const baseHeight = 0.5; // базовая высота в "единицах"
+      const baseWidth = baseHeight * aspect;
+      this.layers.push({
+        id: layerId,
+        name: 'Фото',
+        img,
+        width: baseWidth,
+        height: baseHeight,
+        shiftX: shiftX || 0,
+        shiftY: shiftY || 0,
+        opacity: 1
+      });
+      this.selectedLayerId = layerId;
+      this.reference = img;
+      this.referenceSize = size;
+      this.referenceX = shiftX;
+      this.referenceY = shiftY;
+      this.referenceOpacity = 1;
+    },
+    onSaveFile(fileName) {
+      // TODO: реализовать сохранение данных редактора в файл
+      alert('Сохранение в файл: ' + fileName);
+    },
+    onFileLoaded(fileContent) {
+      // TODO: реализовать загрузку данных редактора из файла
+      alert('Загружен файл!');
+    },
+    onExportFile() {
+      // TODO: реализовать экспорт
+      alert('Экспорт!');
+    },
+    onAutosave() {
+      // TODO: реализовать автосохранение
+      alert('Автосохранение!');
+    },
+    // --- Свободное трансформирование ---
+    onKeyDown(e) {
+      if (e.altKey && (e.key === 'т' || e.key === 'T' || e.key === 'm' || e.key === 'M')) {
+        this.freeTransform = true;
+      }
+    },
+    onKeyUp(e) {
+      if (!e.altKey || (e.key === 'т' || e.key === 'T' || e.key === 'm' || e.key === 'M')) {
+        this.freeTransform = false;
+        this.isTransforming = false;
+        this.transformMode = null;
+      }
+    },
+    // --- Прозрачность картинки ---
+    setReferenceOpacity(opacity) {
+      this.referenceOpacity = opacity;
+    },
+    selectLayer(layerId) {
+      this.selectedLayerId = layerId;
+      const layer = this.layers.find(l => l.id === layerId);
+      if (layer) {
+        this.reference = layer.img;
+        this.referenceSize = layer.size;
+        this.referenceX = layer.shiftX;
+        this.referenceY = layer.shiftY;
+        this.referenceOpacity = layer.opacity;
+      }
+    },
+    selectObject(layerId, objectId) {
+      this.selectedLayerId = layerId;
+      this.selectedObjectId = objectId;
+      // Если объект — фото, обновляем reference для трансформации
+      const layer = this.layers.find(l => l.id === layerId);
+      if (layer) {
+        this.reference = layer.img;
+        this.referenceSize = layer.size;
+        this.referenceX = layer.shiftX;
+        this.referenceY = layer.shiftY;
+        this.referenceOpacity = layer.opacity;
+      }
+    },
+    addLayer() {
+      const newId = 'layer' + (this.layers.length + 1);
+      this.layers.push({ id: newId, name: 'Слой ' + (this.layers.length + 1), img: null, width: 1, height: 1, shiftX: 0, shiftY: 0, opacity: 1 });
+    },
+    // --- Трансформирование с маркерами ---
+    getSelectedLayer() {
+      return this.layers.find(l => l.id === this.selectedLayerId);
+    },
+    getTransformHandles(from, to) {
+      // 8 маркеров: углы и середины сторон
+      return [
+        { x: from.x, y: from.y, type: 'resize-tl' },
+        { x: (from.x + to.x) / 2, y: from.y, type: 'resize-t' },
+        { x: to.x, y: from.y, type: 'resize-tr' },
+        { x: to.x, y: (from.y + to.y) / 2, type: 'resize-r' },
+        { x: to.x, y: to.y, type: 'resize-br' },
+        { x: (from.x + to.x) / 2, y: to.y, type: 'resize-b' },
+        { x: from.x, y: to.y, type: 'resize-bl' },
+        { x: from.x, y: (from.y + to.y) / 2, type: 'resize-l' },
+      ];
+    },
+    openLayerSettings(id) {
+      this.layerSettingsId = id;
+      const layer = this.layers.find(l => l.id === id);
+      this.layerSettingsOpacity = layer ? Math.round((layer.opacity ?? 1) * 100) : 100;
+      this.showLayerSettings = true;
+    },
+    closeLayerSettings() {
+      this.showLayerSettings = false;
+      this.layerSettingsId = null;
+    },
+    applyLayerSettings() {
+      const layer = this.layers.find(l => l.id === this.layerSettingsId);
+      if (layer) {
+        layer.opacity = Math.max(0, Math.min(1, this.layerSettingsOpacity / 100));
+      }
+      this.closeLayerSettings();
+    },
+    resetSelectedLayerSize() {
+      const layer = this.getSelectedLayer();
+      if (layer && layer.img) {
+        const aspect = layer.img.width / layer.img.height;
+        const baseHeight = 0.5;
+        layer.height = baseHeight;
+        layer.width = baseHeight * aspect;
+      }
+    },
   }
 };
 </script>
 
 <style scoped>
 body {
-  background: #888;
+  background: #fff;
 }
 .editor-bg {
-  min-height: 100vh;
-  background: #888;
+  /* min-height: 100vh; */
+  background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -400,8 +619,8 @@ body {
   max-width: 100vw;
   height: 1080px;
   background: #fff;
-  box-shadow: 0 0 40px #0004;
-  border-radius: 1em;
+  /* box-shadow: 0 0 40px #0004; */
+  /* border-radius: 1em; */
   overflow: hidden;
 }
 #mainCanvas {
@@ -444,5 +663,59 @@ button:disabled {
 a {
   text-decoration: none;
   color: black;
+}
+#layersMenu .menuIsland {
+  min-width: 220px;
+}
+.modal-overlay {
+  position: fixed;
+  left: 0; top: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-window {
+  background: #23272f;
+  border-radius: 1em;
+  padding: 2em 2em 1em 2em;
+  min-width: 320px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.28);
+  color: #f8f8f8;
+}
+.modal-window h3 {
+  color: #ffd700;
+  margin-bottom: 1em;
+}
+.modal-window label {
+  color: #f8f8f8;
+  font-weight: 500;
+  margin-bottom: 0.7em;
+  display: block;
+}
+.modal-window input[type="number"] {
+  background: #181a20;
+  color: #ffd700;
+  border: 1px solid #ffd700;
+  border-radius: 5px;
+  padding: 0.4em 0.8em;
+  font-size: 1.1em;
+  margin-left: 0.5em;
+}
+.modal-window button {
+  background: #23272f;
+  color: #ffd700;
+  border: 1px solid #ffd700;
+  border-radius: 6px;
+  padding: 0.5em 1.2em;
+  font-weight: 500;
+  cursor: pointer;
+  margin-left: 0.5em;
+  transition: background 0.2s, color 0.2s;
+}
+.modal-window button:hover {
+  background: #ffd700;
+  color: #23272f;
 }
 </style>
