@@ -61,6 +61,10 @@
         @select-object="selectObject"
         @add-layer="addLayer"
         @edit-layer="openLayerSettings"
+        @lock-layer="toggleLayerLock"
+        @delete-layer="deleteLayer"
+        @move-layer="moveLayer"
+        @edit-layer-name="editLayerName"
         style="position: fixed; right: 2em; top: 2em;"
       />
       <div id="infoMenu" class="menuIsland" style="right: 1em; bottom: 1em; text-align: center">
@@ -373,9 +377,10 @@ export default {
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
       let hit = false;
+      // Проверяем все слои сверху вниз (по Z), пропуская заблокированные
       for (let i = this.layers.length - 1; i >= 0; i--) {
         const layer = this.layers[i];
-        if (!layer.img) continue;
+        if (!layer.img || layer.locked) continue;
         const from = this.v2disposSight2v2canvas({ x: -layer.width / 2 + layer.shiftX, y: -layer.height / 2 + layer.shiftY });
         const to = this.v2disposSight2v2canvas({ x: layer.width / 2 + layer.shiftX, y: layer.height / 2 + layer.shiftY });
         const handles = this.getTransformHandles(from, to);
@@ -495,16 +500,126 @@ export default {
       this.referenceOpacity = 1;
     },
     onSaveFile(fileName) {
-      // TODO: реализовать сохранение данных редактора в файл
-      alert('Сохранение в файл: ' + fileName);
+      // Сохраняем состояние редактора в .txt (JSON)
+      const data = {
+        layers: this.layers.map(l => ({
+          ...l,
+          img: undefined // не сохраняем base64, только параметры слоя
+        })),
+        screenPos: this.screenPos,
+        screenZoom: this.screenZoom,
+        gridSize: this.gridSize
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName + '.txt';
+      a.click();
+      URL.revokeObjectURL(a.href);
     },
-    onFileLoaded(fileContent) {
-      // TODO: реализовать загрузку данных редактора из файла
-      alert('Загружен файл!');
+    async onFileLoaded(fileContent) {
+      // Пробуем распарсить как JSON (txt) или SVG
+      try {
+        if (fileContent.trim().startsWith('<svg')) {
+          // SVG: создаём новый слой
+          const parser = new DOMParser();
+          const svgDoc = parser.parseFromString(fileContent, 'image/svg+xml');
+          const svgBlob = new Blob([fileContent], { type: 'image/svg+xml' });
+          const url = URL.createObjectURL(svgBlob);
+          const img = new window.Image();
+          img.onload = () => {
+            this.layers.push({
+              id: 'layer' + (this.layers.length + 1),
+              name: 'SVG',
+              img,
+              width: 0.5 * (img.width / img.height),
+              height: 0.5,
+              shiftX: 0,
+              shiftY: 0,
+              opacity: 1
+            });
+            URL.revokeObjectURL(url);
+          };
+          img.src = url;
+        } else {
+          // TXT: восстанавливаем состояние
+          const data = JSON.parse(fileContent);
+          this.layers = data.layers.map((l, i) => ({ ...l, img: null }));
+          this.screenPos = data.screenPos || { x: 0, y: 0.1 };
+          this.screenZoom = data.screenZoom || 0.2;
+          this.gridSize = data.gridSize || 0.1;
+        }
+      } catch (e) {
+        alert('Ошибка загрузки файла: ' + e.message);
+      }
     },
     onExportFile() {
-      // TODO: реализовать экспорт
-      alert('Экспорт!');
+      // Экспортируем в .blk по заданному формату
+      let blk = '';
+      blk += 'crosshairHorVertSize:p2=3, 2\n';
+      blk += 'rangefinderProgressBarColor1:c=0, 255, 0, 64\n';
+      blk += 'rangefinderProgressBarColor2:c=255, 255, 255, 64\n';
+      blk += 'rangefinderTextScale:r=0.7\n';
+      blk += 'rangefinderUseThousandth:b=no\n';
+      blk += 'rangefinderVerticalOffset:r=0.1\n';
+      blk += 'rangefinderHorizontalOffset:r=5\n';
+      blk += 'detectAllyTextScale:r=0.7\n';
+      blk += 'detectAllyOffset:p2=4, 0.05\n';
+      blk += 'fontSizeMult:r=1\n';
+      blk += 'lineSizeMult:r=1\n';
+      blk += 'drawCentralLineVert:b=yes\n';
+      blk += 'drawCentralLineHorz:b=yes\n';
+      blk += 'drawSightMask:b=yes\n';
+      blk += 'crosshairColor:c=0, 0, 0, 0\n';
+      blk += 'crosshairLightColor:c=0, 0, 0, 0\n';
+      blk += 'crosshairDistHorSizeMain:p2=0.03, 0.02\n';
+      blk += 'crosshairDistHorSizeAdditional:p2=0.005, 0.003\n';
+      blk += 'distanceCorrectionPos:p2=-0.26, -0.05\n';
+      blk += 'drawDistanceCorrection:b=yes\n\n';
+      blk += 'crosshair_distances{\n';
+      blk += '  distance:p3=200, 0, 0\n';
+      blk += '  distance:p3=400, 4, 0\n';
+      blk += '  distance:p3=600, 0, 0\n';
+      blk += '  distance:p3=800, 8, 0\n';
+      blk += '  distance:p3=1000, 0, 0\n';
+      blk += '  distance:p3=1200, 12, 0\n';
+      blk += '  distance:p3=1400, 0, 0\n';
+      blk += '  distance:p3=1600, 16, 0\n';
+      blk += '  distance:p3=1800, 0, 0\n';
+      blk += '  distance:p3=2000, 20, 0\n';
+      blk += '  distance:p3=2200, 0, 0\n';
+      blk += '  distance:p3=2400, 24, 0\n';
+      blk += '  distance:p3=2600, 0, 0\n';
+      blk += '  distance:p3=2800, 28, 0\n';
+      blk += '  distance:p3=3000, 0, 0\n';
+      blk += '  distance:p3=3200, 32, 0\n';
+      blk += '  distance:p3=3400, 0, 0\n';
+      blk += '  distance:p3=3600, 36, 0\n';
+      blk += '  distance:p3=3800, 0, 0\n';
+      blk += '  distance:p3=4000, 40, 0\n';
+      blk += '  distance:p3=4200, 0, 0\n';
+      blk += '  distance:p3=4400, 44, 0\n';
+      blk += '  distance:p3=4600, 0, 0\n';
+      blk += '  distance:p3=4800, 48, 0\n';
+      blk += '  distance:p3=5000, 0, 0\n';
+      blk += '  distance:p3=5200, 52, 0\n';
+      blk += '  distance:p3=5400, 0, 0\n';
+      blk += '  distance:p3=5600, 56, 0\n';
+      blk += '  distance:p3=5800, 0, 0\n';
+      blk += '  distance:p3=6000, 60, 0\n';
+      blk += '}\n\n';
+      blk += 'crosshair_hor_ranges{\n}\n\n';
+      blk += 'matchExpClass {\nexp_tank:b = yes\nexp_heavy_tank:b = yes\nexp_tank_destroyer:b = yes\nexp_SPAA:b = yes\n}\n\n';
+      blk += 'drawLines{\n';
+      // Пример: экспортируем все линии (или другие объекты)
+      // Здесь нужно добавить экспорт компонентов (линий и т.д.)
+      blk += '}\n';
+      const blob = new Blob([blk], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'export.blk';
+      a.click();
+      URL.revokeObjectURL(a.href);
     },
     onAutosave() {
       // TODO: реализовать автосохранение
@@ -597,6 +712,34 @@ export default {
         layer.height = baseHeight;
         layer.width = baseHeight * aspect;
       }
+    },
+    toggleLayerLock(id) {
+      const layer = this.layers.find(l => l.id === id);
+      if (layer) layer.locked = !layer.locked;
+      // Если заблокировали выделенный слой — снимаем выделение
+      if (layer && layer.locked && this.selectedLayerId === id) {
+        this.selectedLayerId = null;
+      }
+    },
+    deleteLayer(id) {
+      const idx = this.layers.findIndex(l => l.id === id);
+      if (idx !== -1 && !this.layers[idx].locked) {
+        this.layers.splice(idx, 1);
+        if (this.selectedLayerId === id) this.selectedLayerId = null;
+      }
+    },
+    moveLayer({id, dir}) {
+      const idx = this.layers.findIndex(l => l.id === id);
+      if (idx === -1 || this.layers[idx].locked) return;
+      const newIdx = idx + dir;
+      if (newIdx < 0 || newIdx >= this.layers.length) return;
+      if (this.layers[newIdx].locked) return; // нельзя поменять местами с заблокированным
+      const [layer] = this.layers.splice(idx, 1);
+      this.layers.splice(newIdx, 0, layer);
+    },
+    editLayerName({id, name}) {
+      const layer = this.layers.find(l => l.id === id);
+      if (layer && !layer.locked) layer.name = name;
     },
   }
 };

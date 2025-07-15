@@ -1,23 +1,36 @@
 <template>
-  <div class="menuIsland" style="left: 1em; top: 1em">
-    <hr class="menuDragger" size="10px" style="background-color: lightgray">
-    <span>URL картинки:</span>: <input type="text" v-model="refUrl">
-    <button @click="loadRefFromUrl">Загрузить</button>
-    <br>
-    <span>Файл картинки:</span>: <input type="file" @change="onImageFileChange">
-    <br>
-    <br><br>
-    <button @click="$emit('reset-size')">Вернуть исходный размер</button>
-    <br><br>
-    <span>Название файла</span>: <input type="text" v-model="saveFileName"><br>
-    <button @click="saveToFile">Сохранить в файл</button>
-    <button @click="triggerLoadFile">Загрузить из файла</button>
-    <input type="file" ref="loadFileInput" style="display: none" @change="onLoadFileChange">
-    <br>
-    <button @click="$emit('autosave')">Принудительно автосохранить</button>
-    <span style="display:inline-block;width:1em;height:1em;background:#ccc;vertical-align:middle;border-radius:2px;"></span>
-    <br><br>
-    <button @click="exportFile">Экспортировать</button>
+  <div class="menuIsland">
+    <hr class="menuDragger" size="10px">
+    <div class="menu-block">
+      <label class="menu-label">URL картинки:</label>
+      <input class="menu-input" type="text" v-model="refUrl">
+      <button class="menu-btn" @click="loadRefFromUrl">Загрузить</button>
+    </div>
+    <div class="menu-block">
+      <label class="menu-label">Файл картинки:</label>
+      <input class="menu-input" type="file" @change="onImageFileChange">
+    </div>
+    <div class="menu-block">
+      <button class="menu-btn" @click="$emit('reset-size')">Вернуть исходный размер</button>
+    </div>
+    <div class="menu-block">
+      <label class="menu-label">Название файла:</label>
+      <input class="menu-input" type="text" v-model="saveFileName">
+    </div>
+    <div class="menu-block menu-btn-row">
+      <button class="menu-btn" @click="saveToFile">Сохранить в файл</button>
+      <button class="menu-btn" @click="triggerLoadFile">Загрузить из файла</button>
+      <input type="file" ref="loadFileInput" style="display: none" @change="onLoadFileChange">
+    </div>
+    <div class="menu-block menu-autosave">
+      <label class="autosave-label">Автосохранение:</label>
+      <span class="autosave-toggle" :class="{enabled: autoSaveEnabled}" @click="toggleAutosave">
+        <span class="toggle-slider"></span>
+      </span>
+    </div>
+    <div class="menu-block">
+      <button class="menu-btn" @click="exportFile">Экспортировать</button>
+    </div>
   </div>
 </template>
 
@@ -25,12 +38,7 @@
 export default {
   name: 'SightEditorMenu',
   props: {
-    // Для взаимодействия с холстом и редактором
-    onImageLoaded: Function,
-    onFileLoaded: Function,
-    onExport: Function,
-    onSave: Function,
-    onAutosave: Function
+    autoSaveEnabled: Boolean
   },
   data() {
     return {
@@ -79,6 +87,9 @@ export default {
     },
     exportFile() {
       this.$emit('export');
+    },
+    toggleAutosave() {
+      this.$emit('toggle-autosave', !this.autoSaveEnabled);
     }
   }
 };
@@ -86,44 +97,98 @@ export default {
 
 <style scoped>
 .menuIsland {
-  background-color: white;
-  border: 1px solid black;
+  background: #23272f !important;
+  border: 1.5px solid #ffd700;
   position: absolute;
   user-select: none;
-  padding: 1em;
+  padding: 1.5em 1.5em 1em 1.5em;
   border-radius: 1em;
   z-index: 2;
-  color: #000;
+  color: #f8f8f8;
+  font-weight: 500;
+  min-width: 320px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+}
+.menuDragger {
+  margin-bottom: 1em;
+}
+.menu-block {
+  margin-bottom: 1.1em;
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+}
+.menu-label {
+  min-width: 110px;
+  color: #ffd700;
   font-weight: 500;
 }
-.menuIsland,
-.menuIsland * {
-  color: #000 !important;
-  text-shadow: none !important;
+.menu-input[type="text"] {
+  flex: 1;
+  background: #181a20;
+  color: #f8f8f8;
+  border: 1.5px solid #ffd700;
+  border-radius: 5px;
+  padding: 0.4em 0.8em;
+  font-size: 1em;
 }
-input, button, label, span {
-  color: #000 !important;
+.menu-input[type="file"] {
+  color: #f8f8f8;
+  background: #23272f;
+  border: none;
+  padding: 0;
+}
+.menu-btn {
+  background: #23272f;
+  color: #ffd700;
+  border: 1.5px solid #ffd700;
+  border-radius: 6px;
+  padding: 0.5em 1.2em;
   font-weight: 500;
-  text-shadow: none !important;
-}
-button {
-  background: #fff;
-  border: 1px solid #000;
-  border-radius: 4px;
-  padding: 0.3em 1em;
   cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.menu-btn:hover {
+  background: #ffd700;
+  color: #23272f;
+}
+.menu-btn-row {
+  gap: 0.5em;
+}
+.menu-autosave {
+  align-items: center;
+  gap: 0.7em;
+}
+.autosave-label {
+  color: #ffd700;
   font-weight: 500;
 }
-button:hover {
-  background: #f0f0f0;
+.autosave-toggle {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: #444;
+  display: inline-block;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+  border: 1.5px solid #ffd700;
 }
-input[type="text"], input[type="number"] {
-  border: 1px solid #000;
-  border-radius: 4px;
-  padding: 0.2em 0.5em;
+.autosave-toggle.enabled {
+  background: #ffd700;
+}
+.toggle-slider {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
   background: #fff;
+  transition: left 0.2s, background 0.2s;
 }
-input[type="range"] {
-  accent-color: #000;
+.autosave-toggle.enabled .toggle-slider {
+  left: 22px;
+  background: #23272f;
 }
 </style> 
