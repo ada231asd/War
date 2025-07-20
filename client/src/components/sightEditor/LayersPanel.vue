@@ -78,6 +78,7 @@ export default {
   border: 1px solid #444;
   border-radius: 1em;
   padding: 1em;
+  top: 20%;
   min-width: 200px;
   max-height: 70vh;
   overflow-y: auto;

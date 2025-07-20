@@ -1,6 +1,16 @@
 <template>
-  <div class="editor-bg">
-    <div class="editor-area" ref="editorArea">
+  <div class="editor-bg" style="display: flex; flex-direction: column; height: 100vh;">
+    <div class="editor-area" ref="editorArea" style="flex: 1 1 auto; position: relative; min-height: 0;">
+      <!-- Tool panel -->
+      <div class="tool-panel">
+        <img
+          src="@/assets/images/tools/line.png"
+          alt="Линия"
+          class="tool-icon"
+          :class="{ active: tool === 'lines' }"
+          @click="tool = 'lines'"
+        />
+      </div>
       <canvas id="mainCanvas" ref="mainCanvas" :width="canvasWidth" :height="1080"></canvas>
       
       <SightEditorMenu
@@ -12,47 +22,7 @@
         @set-opacity="setReferenceOpacity"
         @reset-size="resetSelectedLayerSize"
       />
-      
-      <div id="toolsMenu" class="menuIsland" style="left: 1em; bottom: 1em;">
-        <hr id="toolsMenuDragger" size="10px" style="background-color: lightgray; margin: 0">
-        <span id="toolTitle">Инструмент</span>:<br>
-        <button id="toolsLinesButton"><span style="display:inline-block;width:3em;height:3em;background:#eee;border:1px solid black;"></span></button>
-        <button id="toolsQuadsButton"><span style="display:inline-block;width:3em;height:3em;background:#eee;border:1px solid black;"></span></button>
-        <br><br>
-        <span id="opacityTitle">Непрозрачность</span>:<br><input id="opacityInput" type="range" value="0.8" min="0" max="1" step="0.05"><br><br>
-        <span id="massLabel">Преобразование рисунка</span>:<br>
-        <table>
-          <tbody>
-            <tr>
-              <td><span id="massXLabel">Смещение X</span>:<br></td>
-              <td><input id="massX" type="number" value="0" step="0.01" style="width: 6em"></td>
-            </tr>
-            <tr>
-              <td><span id="massYLabel">Смещение Y</span>:<br></td>
-              <td><input id="massY" type="number" value="0" step="0.01" style="width: 6em"></td>
-            </tr>
-            <tr>
-              <td><span id="massRLabel">Поворот</span>:<br></td>
-              <td><input id="massR" type="number" value="0" step="1" style="width: 6em"></td>
-            </tr>
-            <tr>
-              <td><span id="massSXLabel">Масштаб X</span>:<br></td>
-              <td><input id="massSX" type="number" value="1" step="0.01" style="width: 6em"></td>
-            </tr>
-            <tr>
-              <td><span id="massSYLabel">Масштаб Y</span>:<br></td>
-              <td><input id="massSY" type="number" value="1" step="0.01" style="width: 6em"></td>
-            </tr>
-            <tr>
-              <td></td>
-              <td><button id="massB">Применить</button></td>
-            </tr>
-          </tbody>
-        </table>
-        <span style="display:inline-block;width:3em;height:3em;background:#eee;border:1px solid black;"></span>
-        <br><a href="https://github.com/solawk/wtdraw" target="_blank">[GitHub]</a>
-        <br><a href="https://boosty.to/solawk" target="_blank">[Boosty]</a>
-      </div>
+    
       <LayersPanel
         :layers="layers"
         :selectedLayerId="selectedLayerId"
@@ -78,6 +48,7 @@
       </div>
       <a id="saver"></a>
     </div>
+    <ConsolePanel :log="consoleLog" style="width: 100%; height: 220px; min-height: 120px; max-height: 320px; border-top: 1px solid #333;" />
     <!-- Модальное окно настроек слоя -->
     <div v-if="showLayerSettings" class="modal-overlay">
       <div class="modal-window">
@@ -98,9 +69,10 @@
 import editorConfig from '../sightEditor/config';
 import SightEditorMenu from '../components/sightEditor/SightEditorMenu.vue';
 import LayersPanel from '../components/sightEditor/LayersPanel.vue';
+import ConsolePanel from '../components/sightEditor/ConsolePanel.vue';
 export default {
   name: 'SightEditorView',
-  components: { SightEditorMenu, LayersPanel },
+  components: { SightEditorMenu, LayersPanel, ConsolePanel },
   data() {
     return {
       screenPos: { x: 0, y: 0.1 },
@@ -141,6 +113,11 @@ export default {
       showLayerSettings: false,
       layerSettingsId: null,
       layerSettingsOpacity: 100,
+      consoleLog: [],
+      drawingLine: null, // временная линия (points: [{x, y}, ...])
+      isDrawingLine: false, // флаг рисования линии
+      isCtrlDown: false, // для поддержки Ctrl
+      hoveredVertex: null, // {lineIdx, pointIdx, x, y} если есть подсвеченная вершина
     };
   },
   mounted() {
@@ -181,6 +158,7 @@ export default {
       this.canvas.onpointerdown = this.onPointerDown;
       this.canvas.onpointermove = this.onPointerMove;
       this.canvas.onpointerup = this.onPointerUp;
+      this.canvas.onclick = this.onCanvasClick;
     },
     render() {
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -296,7 +274,52 @@ export default {
       return { x: newX, y: newY };
     },
     drawStuff() {
-      // Для примера: пустая реализация, т.к. objects и логика добавления объектов не реализованы
+      // Рисуем все линии только из слоя 'Линии'
+      const linesLayer = this.layers.find(l => l.name === 'Линии');
+      if (!linesLayer || !linesLayer.lines) return;
+      this.ctx.save();
+      this.ctx.strokeStyle = 'black';
+      this.ctx.lineWidth = 2;
+      for (const line of linesLayer.lines) {
+        if (line.points.length < 2) continue;
+        this.ctx.beginPath();
+        const start = this.sightToCanvas(line.points[0]);
+        this.ctx.moveTo(start.x, start.y);
+        for (let i = 1; i < line.points.length; i++) {
+          const pt = this.sightToCanvas(line.points[i]);
+          this.ctx.lineTo(pt.x, pt.y);
+        }
+        this.ctx.stroke();
+      }
+      // Рисуем "призрак" линии
+      if (this.isDrawingLine && this.drawingLine && this.drawingLine.points.length > 0 && this.drawingLine.ghost) {
+        this.ctx.save();
+        this.ctx.setLineDash([8, 8]);
+        this.ctx.globalAlpha = 0.5;
+        this.ctx.strokeStyle = 'black';
+        this.ctx.lineWidth = 2;
+        const pts = this.drawingLine.points;
+        const from = this.sightToCanvas(pts[pts.length - 1]);
+        const to = this.sightToCanvas(this.drawingLine.ghost);
+        this.ctx.beginPath();
+        this.ctx.moveTo(from.x, from.y);
+        this.ctx.lineTo(to.x, to.y);
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
+        this.ctx.globalAlpha = 1;
+        this.ctx.restore();
+      }
+      // Подсветка вершины
+      if (this.hoveredVertex) {
+        const c = this.sightToCanvas(this.hoveredVertex);
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.arc(c.x, c.y, 10, 0, 2 * Math.PI);
+        this.ctx.fillStyle = 'rgba(120,120,120,0.4)';
+        this.ctx.fill();
+        this.ctx.restore();
+      }
+      this.ctx.restore();
     },
     getArrowSources(object) {
       const arrowSources = [];
@@ -372,7 +395,111 @@ export default {
     drawGhost() {
       // Для примера: пустая реализация, т.к. tool, drawing, snapping, quadPos и прочее не реализованы
     },
+    onKeyDown(e) {
+      if (e.key === 'Control') {
+        this.isCtrlDown = true;
+      }
+      if (e.altKey && (e.key === 'т' || e.key === 'T' || e.key === 'm' || e.key === 'M')) {
+        this.freeTransform = true;
+      }
+    },
+    onKeyUp(e) {
+      if (e.key === 'Control') {
+        this.isCtrlDown = false;
+      }
+      if (!e.altKey || (e.key === 'т' || e.key === 'T' || e.key === 'm' || e.key === 'M')) {
+        this.freeTransform = false;
+        this.isTransforming = false;
+        this.transformMode = null;
+      }
+    },
+    ensureLinesLayer() {
+      let layer = this.layers.find(l => l.name === 'Линии');
+      if (!layer) {
+        layer = { id: 'linesLayer', name: 'Линии', type: 'lines', lines: [], img: null, width: 1, height: 1, shiftX: 0, shiftY: 0, opacity: 1 };
+        this.layers.push(layer);
+      }
+      this.selectedLayerId = layer.id;
+      return layer;
+    },
+    onCanvasClick(e) {
+      if (this.tool !== 'lines') return;
+      const linesLayer = this.ensureLinesLayer();
+      const rect = this.canvas.getBoundingClientRect();
+      const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const { x, y } = this.canvasToSight(canvasPt);
+      if (this.isCtrlDown && this.hoveredVertex) {
+        if (this.isDrawingLine) {
+          this.drawingLine.points.push({ x: this.hoveredVertex.x, y: this.hoveredVertex.y });
+          linesLayer.lines.push({ ...this.drawingLine });
+          this.addLineToConsole(this.drawingLine);
+          this.drawingLine = null;
+          this.isDrawingLine = false;
+        } else {
+          this.drawingLine = { points: [{ x: this.hoveredVertex.x, y: this.hoveredVertex.y }] };
+          this.isDrawingLine = true;
+        }
+        return;
+      }
+      if (!this.isDrawingLine) {
+        this.drawingLine = { points: [{ x, y }] };
+        this.isDrawingLine = true;
+      } else {
+        this.drawingLine.points.push({ x, y });
+        linesLayer.lines.push({ ...this.drawingLine });
+        this.addLineToConsole(this.drawingLine);
+        this.drawingLine = null;
+        this.isDrawingLine = false;
+      }
+    },
+    onPointerMove(e) {
+      if (this.dragging) {
+        const dx = (e.clientX - this.lastDragPos.x) / (this.screenZoom * 2000);
+        const dy = (e.clientY - this.lastDragPos.y) / (this.screenZoom * 2000);
+        this.screenPos.x -= dx;
+        this.screenPos.y -= dy;
+        this.lastDragPos = { x: e.clientX, y: e.clientY };
+        return;
+      }
+      if (this.tool === 'lines' && this.isCtrlDown) {
+        // Поиск ближайшей вершины только среди linesLayer.lines
+        const linesLayer = this.layers.find(l => l.name === 'Линии');
+        if (!linesLayer || !linesLayer.lines) return;
+        const rect = this.canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        let minDist = 15; // px
+        let found = null;
+        linesLayer.lines.forEach((line, lineIdx) => {
+          line.points.forEach((pt, pointIdx) => {
+            const c = this.sightToCanvas(pt);
+            const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
+            if (dist < minDist) {
+              minDist = dist;
+              found = { lineIdx, pointIdx, x: pt.x, y: pt.y };
+            }
+          });
+        });
+        this.hoveredVertex = found;
+      } else {
+        this.hoveredVertex = null;
+      }
+      // Призрак линии
+      if (this.tool !== 'lines' || !this.isDrawingLine) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const { x, y } = this.canvasToSight(canvasPt);
+      if (this.drawingLine) {
+        this.drawingLine.ghost = { x, y };
+      }
+    },
     onPointerDown(e) {
+      if (e.button === 2) { // ПКМ
+        this.dragging = true;
+        this.lastDragPos = { x: e.clientX, y: e.clientY };
+        return;
+      }
+      if (this.tool === 'lines') return; // для lines используем onCanvasClick
       const rect = this.canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
@@ -408,45 +535,12 @@ export default {
         this.selectedLayerId = null;
       }
     },
-    onPointerMove(e) {
-      if (!this.isTransforming) return;
-      const layer = this.getSelectedLayer();
-      if (!layer) return;
-      const rect = this.canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const dx = (mx - this.transformStart.x) / (this.screenZoom * 2000);
-      const dy = (my - this.transformStart.y) / (this.screenZoom * 2000);
-      if (this.transformMode === 'move') {
-        layer.shiftX = this.transformStart.shiftX + dx;
-        layer.shiftY = this.transformStart.shiftY + dy;
-      } else if (this.transformMode === 'resize-l') {
-        layer.width = Math.max(0.05, this.transformStart.width - dx);
-      } else if (this.transformMode === 'resize-r') {
-        layer.width = Math.max(0.05, this.transformStart.width + dx);
-      } else if (this.transformMode === 'resize-t') {
-        layer.height = Math.max(0.05, this.transformStart.height - dy);
-      } else if (this.transformMode === 'resize-b') {
-        layer.height = Math.max(0.05, this.transformStart.height + dy);
-      } else if (this.transformMode === 'resize-tl') {
-        layer.width = Math.max(0.05, this.transformStart.width - dx);
-        layer.height = Math.max(0.05, this.transformStart.height - dy);
-      } else if (this.transformMode === 'resize-tr') {
-        layer.width = Math.max(0.05, this.transformStart.width + dx);
-        layer.height = Math.max(0.05, this.transformStart.height - dy);
-      } else if (this.transformMode === 'resize-bl') {
-        layer.width = Math.max(0.05, this.transformStart.width - dx);
-        layer.height = Math.max(0.05, this.transformStart.height + dy);
-      } else if (this.transformMode === 'resize-br') {
-        layer.width = Math.max(0.05, this.transformStart.width + dx);
-        layer.height = Math.max(0.05, this.transformStart.height + dy);
-      }
-      this.reference = layer.img;
-      this.referenceSize = layer.size;
-      this.referenceX = layer.shiftX;
-      this.referenceY = layer.shiftY;
-    },
     onPointerUp(e) {
+      if (e.button === 2) {
+        this.dragging = false;
+        return;
+      }
+      if (this.tool === 'lines') return;
       this.isTransforming = false;
       this.transformMode = null;
     },
@@ -461,6 +555,7 @@ export default {
         this.screenZoom /= 1.1;
         if (this.screenZoom <= 0.1) this.screenZoom = 0.1;
       }
+      // screenPos не меняем! Масштабирование строго от центра холста.
     },
     clearDrawing() {
       // Для примера: пустая реализация
@@ -482,7 +577,7 @@ export default {
       const aspect = img.width / img.height;
       const baseHeight = 0.5; // базовая высота в "единицах"
       const baseWidth = baseHeight * aspect;
-      this.layers.push({
+      const layer = {
         id: layerId,
         name: 'Фото',
         img,
@@ -491,13 +586,20 @@ export default {
         shiftX: shiftX || 0,
         shiftY: shiftY || 0,
         opacity: 1
-      });
+      };
+      this.layers.push(layer);
       this.selectedLayerId = layerId;
       this.reference = img;
       this.referenceSize = size;
       this.referenceX = shiftX;
       this.referenceY = shiftY;
       this.referenceOpacity = 1;
+      // Добавляем запись в консоль
+      this.consoleLog.push({
+        type: 'Фото',
+        settings: `id=${layer.id} width=${layer.width} height=${layer.height} opacity=${layer.opacity}`,
+        svg: `<image x="0" y="0" width="${layer.width}" height="${layer.height}" href="data:image/png;base64,..." opacity="${layer.opacity}"/>`
+      });
     },
     onSaveFile(fileName) {
       // Сохраняем состояние редактора в .txt (JSON)
@@ -625,19 +727,6 @@ export default {
       // TODO: реализовать автосохранение
       alert('Автосохранение!');
     },
-    // --- Свободное трансформирование ---
-    onKeyDown(e) {
-      if (e.altKey && (e.key === 'т' || e.key === 'T' || e.key === 'm' || e.key === 'M')) {
-        this.freeTransform = true;
-      }
-    },
-    onKeyUp(e) {
-      if (!e.altKey || (e.key === 'т' || e.key === 'T' || e.key === 'm' || e.key === 'M')) {
-        this.freeTransform = false;
-        this.isTransforming = false;
-        this.transformMode = null;
-      }
-    },
     // --- Прозрачность картинки ---
     setReferenceOpacity(opacity) {
       this.referenceOpacity = opacity;
@@ -668,7 +757,14 @@ export default {
     },
     addLayer() {
       const newId = 'layer' + (this.layers.length + 1);
-      this.layers.push({ id: newId, name: 'Слой ' + (this.layers.length + 1), img: null, width: 1, height: 1, shiftX: 0, shiftY: 0, opacity: 1 });
+      const layer = { id: newId, name: 'Слой ' + (this.layers.length + 1), img: null, width: 1, height: 1, shiftX: 0, shiftY: 0, opacity: 1 };
+      this.layers.push(layer);
+      // Добавляем запись в консоль
+      this.consoleLog.push({
+        type: 'Слой',
+        settings: `id=${layer.id} name=${layer.name} width=${layer.width} height=${layer.height} opacity=${layer.opacity}`,
+        svg: `<rect x="0" y="0" width="${layer.width}" height="${layer.height}" fill="none" stroke="black" opacity="${layer.opacity}"/>`
+      });
     },
     // --- Трансформирование с маркерами ---
     getSelectedLayer() {
@@ -740,6 +836,31 @@ export default {
     editLayerName({id, name}) {
       const layer = this.layers.find(l => l.id === id);
       if (layer && !layer.locked) layer.name = name;
+    },
+    addLineToConsole(line) {
+      if (!line || !line.points || line.points.length < 2) return;
+      const ptsStr = line.points.map(p => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(' ');
+      const svg = `<polyline points="${line.points.map(p => `${p.x},${p.y}`).join(' ')}" stroke="black" fill="none"/>`;
+      this.consoleLog.push({
+        type: 'Линия',
+        settings: `points: ${ptsStr}`,
+        svg
+      });
+    },
+    // --- Преобразования координат ---
+    // Мировые (sight) -> экранные (canvas)
+    sightToCanvas(sight) {
+      return {
+        x: (sight.x - this.screenPos.x) * this.screenZoom * 2000 + this.canvas.width / 2,
+        y: (sight.y - this.screenPos.y) * this.screenZoom * 2000 + this.canvas.height / 2,
+      };
+    },
+    // Экранные (canvas) -> мировые (sight)
+    canvasToSight(canvasPt) {
+      return {
+        x: (canvasPt.x - this.canvas.width / 2) / (this.screenZoom * 2000) + this.screenPos.x,
+        y: (canvasPt.y - this.canvas.height / 2) / (this.screenZoom * 2000) + this.screenPos.y,
+      };
     },
   }
 };
@@ -860,5 +981,39 @@ a {
 .modal-window button:hover {
   background: #ffd700;
   color: #23272f;
+}
+.tool-panel {
+  position: absolute;
+  top: 2%;
+  left: 0;
+  right: 0;
+  margin-left: auto;
+  margin-right: auto;
+  width: 200px;
+  min-width: 200px;
+  height: 60px;
+  background: #2d2f3aee;
+  color: #ffd700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-bottom: 2px solid #ffd700;
+  border-radius: 12px 12px 18px 18px;
+  font-size: 1.2em;
+  box-sizing: border-box;
+  box-shadow: 0 4px 24px 0 #0006, 0 1.5px 0 #ffd700;
+}
+.tool-icon {
+  width: 36px;
+  height: 36px;
+  margin: 0 8px;
+  cursor: pointer;
+  transition: filter 0.2s, box-shadow 0.2s;
+}
+.tool-icon.active {
+  filter: brightness(1.3) drop-shadow(0 0 8px #ffd70088);
+  box-shadow: 0 0 0 2px #ffd700;
+  border-radius: 8px;
 }
 </style>
