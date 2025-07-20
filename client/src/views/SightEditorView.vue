@@ -10,6 +10,13 @@
           :class="{ active: tool === 'lines' }"
           @click="tool = 'lines'"
         />
+        <img
+          src="@/assets/images/tools/poligon.png"
+          alt="Многоугольник"
+          class="tool-icon"
+          :class="{ active: tool === 'polygon' }"
+          @click="tool = 'polygon'"
+        />
       </div>
       <canvas id="mainCanvas" ref="mainCanvas" :width="canvasWidth" :height="1080"></canvas>
       
@@ -70,6 +77,7 @@ import editorConfig from '../sightEditor/config';
 import SightEditorMenu from '../components/sightEditor/SightEditorMenu.vue';
 import LayersPanel from '../components/sightEditor/LayersPanel.vue';
 import ConsolePanel from '../components/sightEditor/ConsolePanel.vue';
+import { drawPolygons, drawGhostPolygon, findNearestVertex as findNearestPolyVertex } from '../components/sightEditor/tools/polygonTool.js';
 export default {
   name: 'SightEditorView',
   components: { SightEditorMenu, LayersPanel, ConsolePanel },
@@ -118,6 +126,10 @@ export default {
       isDrawingLine: false, // флаг рисования линии
       isCtrlDown: false, // для поддержки Ctrl
       hoveredVertex: null, // {lineIdx, pointIdx, x, y} если есть подсвеченная вершина
+      // --- polygon tool ---
+      drawingPolygon: null, // { points: [{x, y}, ...] }
+      isDrawingPolygon: false,
+      hoveredPolyVertex: null, // {polyIdx, pointIdx, x, y}
     };
   },
   mounted() {
@@ -168,6 +180,32 @@ export default {
       this.drawStuff();
       this.drawArrows();
       this.drawGhost();
+      // --- polygons ---
+      const polygonsLayer = this.ensurePolygonsLayer();
+      drawPolygons(this.ctx, polygonsLayer.polygons, this.screenPos, this.screenZoom, this.canvas.width, this.canvas.height);
+      // Подсветка всех вершин всех многоугольников
+      this.ctx.save();
+      this.ctx.fillStyle = 'rgba(120,120,120,0.4)';
+      polygonsLayer.polygons.forEach(polygon => {
+        polygon.points.forEach(pt => {
+          const c = this.sightToCanvas(pt);
+          this.ctx.beginPath();
+          this.ctx.arc(c.x, c.y, 10, 0, 2 * Math.PI);
+          this.ctx.fill();
+        });
+      });
+      this.ctx.restore();
+      if (this.tool === 'polygon' && this.isDrawingPolygon && this.drawingPolygon && this.drawingPolygon.points.length > 0) {
+        drawGhostPolygon(this.ctx, this.drawingPolygon.points, this.drawingPolygon.ghost, this.screenPos, this.screenZoom, this.canvas.width, this.canvas.height);
+        // Подсветка первой вершины строящегося многоугольника
+        const c = this.sightToCanvas(this.drawingPolygon.points[0]);
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.arc(c.x, c.y, 10, 0, 2 * Math.PI);
+        this.ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        this.ctx.fill();
+        this.ctx.restore();
+      }
       requestAnimationFrame(this.render);
     },
     v2disposSight2v2sight(disposSight) {
@@ -423,33 +461,56 @@ export default {
       return layer;
     },
     onCanvasClick(e) {
-      if (this.tool !== 'lines') return;
-      const linesLayer = this.ensureLinesLayer();
-      const rect = this.canvas.getBoundingClientRect();
-      const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      const { x, y } = this.canvasToSight(canvasPt);
-      if (this.isCtrlDown && this.hoveredVertex) {
-        if (this.isDrawingLine) {
-          this.drawingLine.points.push({ x: this.hoveredVertex.x, y: this.hoveredVertex.y });
+      if (this.tool === 'lines') {
+        const linesLayer = this.ensureLinesLayer();
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const { x, y } = this.canvasToSight(canvasPt);
+        if (this.isCtrlDown && this.hoveredVertex) {
+          if (this.isDrawingLine) {
+            this.drawingLine.points.push({ x: this.hoveredVertex.x, y: this.hoveredVertex.y });
+            linesLayer.lines.push({ ...this.drawingLine });
+            this.addLineToConsole(this.drawingLine);
+            this.drawingLine = null;
+            this.isDrawingLine = false;
+          } else {
+            this.drawingLine = { points: [{ x: this.hoveredVertex.x, y: this.hoveredVertex.y }] };
+            this.isDrawingLine = true;
+          }
+          return;
+        }
+        if (!this.isDrawingLine) {
+          this.drawingLine = { points: [{ x, y }] };
+          this.isDrawingLine = true;
+        } else {
+          this.drawingLine.points.push({ x, y });
           linesLayer.lines.push({ ...this.drawingLine });
           this.addLineToConsole(this.drawingLine);
           this.drawingLine = null;
           this.isDrawingLine = false;
-        } else {
-          this.drawingLine = { points: [{ x: this.hoveredVertex.x, y: this.hoveredVertex.y }] };
-          this.isDrawingLine = true;
         }
-        return;
       }
-      if (!this.isDrawingLine) {
-        this.drawingLine = { points: [{ x, y }] };
-        this.isDrawingLine = true;
-      } else {
-        this.drawingLine.points.push({ x, y });
-        linesLayer.lines.push({ ...this.drawingLine });
-        this.addLineToConsole(this.drawingLine);
-        this.drawingLine = null;
-        this.isDrawingLine = false;
+      if (this.tool === 'polygon') {
+        const polygonsLayer = this.ensurePolygonsLayer();
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const { x, y } = this.canvasToSight(canvasPt);
+        // Если клик по первой вершине и точек >= 3 — замыкаем
+        if (this.isDrawingPolygon && this.drawingPolygon && this.drawingPolygon.points.length >= 3 && this.hoveredPolyVertex && this.hoveredPolyVertex.pointIdx === 0) {
+          polygonsLayer.polygons.push({ points: [...this.drawingPolygon.points] });
+          this.drawingPolygon = null;
+          this.isDrawingPolygon = false;
+          this.hoveredPolyVertex = null;
+          return;
+        }
+        // Начинаем новый многоугольник
+        if (!this.isDrawingPolygon) {
+          this.drawingPolygon = { points: [{ x, y }] };
+          this.isDrawingPolygon = true;
+        } else {
+          // Добавляем вершину
+          this.drawingPolygon.points.push({ x, y });
+        }
       }
     },
     onPointerMove(e) {
@@ -461,26 +522,23 @@ export default {
         this.lastDragPos = { x: e.clientX, y: e.clientY };
         return;
       }
-      if (this.tool === 'lines' && this.isCtrlDown) {
-        // Поиск ближайшей вершины только среди linesLayer.lines
-        const linesLayer = this.layers.find(l => l.name === 'Линии');
-        if (!linesLayer || !linesLayer.lines) return;
-        const rect = this.canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        let minDist = 15; // px
-        let found = null;
-        linesLayer.lines.forEach((line, lineIdx) => {
-          line.points.forEach((pt, pointIdx) => {
-            const c = this.sightToCanvas(pt);
-            const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
-            if (dist < minDist) {
-              minDist = dist;
-              found = { lineIdx, pointIdx, x: pt.x, y: pt.y };
-            }
-          });
-        });
-        this.hoveredVertex = found;
+      if (this.tool === 'polygon') {
+        // Поиск ближайшей вершины только среди строящегося многоугольника
+        if (this.isDrawingPolygon && this.drawingPolygon && this.drawingPolygon.points.length > 0) {
+          const rect = this.canvas.getBoundingClientRect();
+          const mx = e.clientX - rect.left;
+          const my = e.clientY - rect.top;
+          // Только по первой вершине
+          const first = this.drawingPolygon.points[0];
+          const c = this.sightToCanvas(first);
+          const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
+          this.hoveredPolyVertex = (dist < 15) ? { polyIdx: -1, pointIdx: 0, x: first.x, y: first.y } : null;
+          // Призрак
+          const { x, y } = this.canvasToSight({ x: mx, y: my });
+          this.drawingPolygon.ghost = { x, y };
+        } else {
+          this.hoveredPolyVertex = null;
+        }
       } else {
         this.hoveredVertex = null;
       }
@@ -862,6 +920,28 @@ export default {
         y: (canvasPt.y - this.canvas.height / 2) / (this.screenZoom * 2000) + this.screenPos.y,
       };
     },
+    ensurePolygonsLayer() {
+      let layer = this.layers.find(l => l.name === 'Многоугольники');
+      if (!layer) {
+        layer = { id: 'polygonsLayer', name: 'Многоугольники', type: 'polygons', polygons: [], img: null, width: 1, height: 1, shiftX: 0, shiftY: 0, opacity: 1 };
+        this.layers.push(layer);
+      }
+      return layer;
+    },
+  },
+  watch: {
+    tool(newTool, oldTool) {
+      if (oldTool === 'polygon') {
+        this.drawingPolygon = null;
+        this.isDrawingPolygon = false;
+        this.hoveredPolyVertex = null;
+      }
+      if (oldTool === 'lines') {
+        this.drawingLine = null;
+        this.isDrawingLine = false;
+        this.hoveredVertex = null;
+      }
+    }
   }
 };
 </script>
