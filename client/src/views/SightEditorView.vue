@@ -54,6 +54,16 @@
         <span id="hintsText"></span>
       </div>
       <a id="saver"></a>
+      <!-- Окно предпросмотра -->
+      <div v-if="showPreview" class="modal-overlay">
+        <div class="modal-window">
+          <h3>Предпросмотр экспорта (.blk)</h3>
+          <canvas ref="previewCanvas" width="600" height="400" style="background:#fff; border:1px solid #333;"></canvas>
+          <div style="margin-top:1em; text-align:right;">
+            <button @click="showPreview=false">Закрыть</button>
+          </div>
+        </div>
+      </div>
     </div>
     <ConsolePanel :log="consoleLog" style="width: 100%; height: 220px; min-height: 120px; max-height: 320px; border-top: 1px solid #333;" />
     <!-- Модальное окно настроек слоя -->
@@ -69,6 +79,7 @@
         </div>
       </div>
     </div>
+    <button style="position:fixed;top:1em;right:1em;z-index:1001" @click="openPreview">Предпросмотр .blk</button>
   </div>
 </template>
 
@@ -78,6 +89,8 @@ import SightEditorMenu from '../components/sightEditor/SightEditorMenu.vue';
 import LayersPanel from '../components/sightEditor/LayersPanel.vue';
 import ConsolePanel from '../components/sightEditor/ConsolePanel.vue';
 import { drawPolygons, drawGhostPolygon, findNearestVertex as findNearestPolyVertex } from '../components/sightEditor/tools/polygonTool.js';
+import earcut from 'earcut';
+
 export default {
   name: 'SightEditorView',
   components: { SightEditorMenu, LayersPanel, ConsolePanel },
@@ -130,6 +143,7 @@ export default {
       drawingPolygon: null, // { points: [{x, y}, ...] }
       isDrawingPolygon: false,
       hoveredPolyVertex: null, // {polyIdx, pointIdx, x, y}
+      showPreview: false,
     };
   },
   mounted() {
@@ -312,52 +326,120 @@ export default {
       return { x: newX, y: newY };
     },
     drawStuff() {
-      // Рисуем все линии только из слоя 'Линии'
+      // Всегда рисуем все линии
       const linesLayer = this.layers.find(l => l.name === 'Линии');
-      if (!linesLayer || !linesLayer.lines) return;
-      this.ctx.save();
-      this.ctx.strokeStyle = 'black';
-      this.ctx.lineWidth = 2;
-      for (const line of linesLayer.lines) {
-        if (line.points.length < 2) continue;
-        this.ctx.beginPath();
-        const start = this.sightToCanvas(line.points[0]);
-        this.ctx.moveTo(start.x, start.y);
-        for (let i = 1; i < line.points.length; i++) {
-          const pt = this.sightToCanvas(line.points[i]);
-          this.ctx.lineTo(pt.x, pt.y);
-        }
-        this.ctx.stroke();
-      }
-      // Рисуем "призрак" линии
-      if (this.isDrawingLine && this.drawingLine && this.drawingLine.points.length > 0 && this.drawingLine.ghost) {
+      if (linesLayer && linesLayer.lines) {
         this.ctx.save();
-        this.ctx.setLineDash([8, 8]);
-        this.ctx.globalAlpha = 0.5;
         this.ctx.strokeStyle = 'black';
         this.ctx.lineWidth = 2;
-        const pts = this.drawingLine.points;
-        const from = this.sightToCanvas(pts[pts.length - 1]);
-        const to = this.sightToCanvas(this.drawingLine.ghost);
-        this.ctx.beginPath();
-        this.ctx.moveTo(from.x, from.y);
-        this.ctx.lineTo(to.x, to.y);
-        this.ctx.stroke();
-        this.ctx.setLineDash([]);
+        for (const line of linesLayer.lines) {
+          if (line.points.length < 2) continue;
+          this.ctx.beginPath();
+          const start = this.sightToCanvas(line.points[0]);
+          this.ctx.moveTo(start.x, start.y);
+          for (let i = 1; i < line.points.length; i++) {
+            const pt = this.sightToCanvas(line.points[i]);
+            this.ctx.lineTo(pt.x, pt.y);
+          }
+          this.ctx.stroke();
+        }
+        this.ctx.restore();
+      }
+      // Всегда рисуем все многоугольники
+      const poligonLayer = this.layers.find(l => l.name === 'Многоугольники');
+      if (poligonLayer && poligonLayer.poligons) {
+        this.ctx.save();
+        this.ctx.fillStyle = 'black';
+        this.ctx.globalAlpha = 0.7;
+        for (const poly of poligonLayer.poligons) {
+          if (poly.points.length < 3) continue;
+          this.ctx.beginPath();
+          const start = this.sightToCanvas(poly.points[0]);
+          this.ctx.moveTo(start.x, start.y);
+          for (let i = 1; i < poly.points.length; i++) {
+            const pt = this.sightToCanvas(poly.points[i]);
+            this.ctx.lineTo(pt.x, pt.y);
+          }
+          this.ctx.closePath();
+          this.ctx.fill();
+        }
         this.ctx.globalAlpha = 1;
         this.ctx.restore();
       }
-      // Подсветка вершины
-      if (this.hoveredVertex) {
-        const c = this.sightToCanvas(this.hoveredVertex);
-        this.ctx.save();
-        this.ctx.beginPath();
-        this.ctx.arc(c.x, c.y, 10, 0, 2 * Math.PI);
-        this.ctx.fillStyle = 'rgba(120,120,120,0.4)';
-        this.ctx.fill();
-        this.ctx.restore();
+      // Призраки и подсветка — только для активного инструмента
+      if (this.tool === 'lines') {
+        if (this.isDrawingLine && this.drawingLine && this.drawingLine.points.length > 0 && this.drawingLine.ghost) {
+          this.ctx.save();
+          this.ctx.setLineDash([8, 8]);
+          this.ctx.globalAlpha = 0.5;
+          this.ctx.strokeStyle = 'black';
+          this.ctx.lineWidth = 2;
+          const pts = this.drawingLine.points;
+          const from = this.sightToCanvas(pts[pts.length - 1]);
+          const to = this.sightToCanvas(this.drawingLine.ghost);
+          this.ctx.beginPath();
+          this.ctx.moveTo(from.x, from.y);
+          this.ctx.lineTo(to.x, to.y);
+          this.ctx.stroke();
+          this.ctx.setLineDash([]);
+          this.ctx.globalAlpha = 1;
+          this.ctx.restore();
+        }
+        if (this.hoveredVertex) {
+          const c = this.sightToCanvas(this.hoveredVertex);
+          this.ctx.save();
+          this.ctx.beginPath();
+          this.ctx.arc(c.x, c.y, 10, 0, 2 * Math.PI);
+          this.ctx.fillStyle = 'rgba(120,120,120,0.4)';
+          this.ctx.fill();
+          this.ctx.restore();
+        }
       }
-      this.ctx.restore();
+      if (this.tool === 'poligon') {
+        if (this.isDrawingPolygon && this.drawingPolygon && this.drawingPolygon.points.length > 0) {
+          const pts = this.drawingPolygon.points;
+          // Рисуем все уже добавленные стороны
+          this.ctx.save();
+          this.ctx.globalAlpha = 1;
+          this.ctx.strokeStyle = 'black';
+          this.ctx.lineWidth = 2;
+          this.ctx.beginPath();
+          const start = this.sightToCanvas(pts[0]);
+          this.ctx.moveTo(start.x, start.y);
+          for (let i = 1; i < pts.length; i++) {
+            const pt = this.sightToCanvas(pts[i]);
+            this.ctx.lineTo(pt.x, pt.y);
+          }
+          this.ctx.stroke();
+          this.ctx.restore();
+          // Пунктиром — текущий сегмент к курсору
+          if (this.drawingPolygon.ghost) {
+            this.ctx.save();
+            this.ctx.setLineDash([8, 8]);
+            this.ctx.globalAlpha = 0.5;
+            this.ctx.strokeStyle = 'black';
+            this.ctx.lineWidth = 2;
+            const from = this.sightToCanvas(pts[pts.length - 1]);
+            const to = this.sightToCanvas(this.drawingPolygon.ghost);
+            this.ctx.beginPath();
+            this.ctx.moveTo(from.x, from.y);
+            this.ctx.lineTo(to.x, to.y);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+            this.ctx.globalAlpha = 1;
+            this.ctx.restore();
+          }
+        }
+        if (this.hoveredPolyVertex) {
+          const c = this.sightToCanvas(this.hoveredPolyVertex);
+          this.ctx.save();
+          this.ctx.beginPath();
+          this.ctx.arc(c.x, c.y, 10, 0, 2 * Math.PI);
+          this.ctx.fillStyle = 'rgba(120,120,120,0.4)';
+          this.ctx.fill();
+          this.ctx.restore();
+        }
+      }
     },
     getArrowSources(object) {
       const arrowSources = [];
@@ -461,6 +543,41 @@ export default {
       return layer;
     },
     onCanvasClick(e) {
+      if (this.tool === 'polygon') {
+        const poligonLayer = this.ensurePolygonsLayer();
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const { x, y } = this.canvasToSight(canvasPt);
+        let snapVertex = this.hoveredVertex || this.hoveredPolyVertex;
+        const newPoint = snapVertex ? { x: snapVertex.x, y: snapVertex.y } : { x, y };
+
+        if (!this.isDrawingPolygon) {
+          this.drawingPolygon = { points: [newPoint] };
+          this.isDrawingPolygon = true;
+        } else {
+          // Проверка на замыкание (клик по первой вершине)
+          const firstPoint = this.drawingPolygon.points[0];
+          const firstPointCanvas = this.sightToCanvas(firstPoint);
+          const distToFirst = Math.sqrt((canvasPt.x - firstPointCanvas.x) ** 2 + (canvasPt.y - firstPointCanvas.y) ** 2);
+
+          if (this.drawingPolygon.points.length >= 3 && distToFirst < 15) {
+            // Завершаем и сохраняем полигон
+            poligonLayer.polygons.push({ ...this.drawingPolygon });
+            this.drawingPolygon = null;
+            this.isDrawingPolygon = false;
+            return;
+          }
+
+          // Проверка на выпуклость
+          const potentialPolygon = [...this.drawingPolygon.points, newPoint];
+          if (!this.isConvex(potentialPolygon)) {
+            alert('Ошибка: можно создавать только правильные выпуклые многоугольники.');
+            return;
+          }
+          this.drawingPolygon.points.push(newPoint);
+        }
+        return;
+      }
       if (this.tool === 'lines') {
         const linesLayer = this.ensureLinesLayer();
         const rect = this.canvas.getBoundingClientRect();
@@ -477,41 +594,26 @@ export default {
             this.drawingLine = { points: [{ x: this.hoveredVertex.x, y: this.hoveredVertex.y }] };
             this.isDrawingLine = true;
           }
-          return;
-        }
-        if (!this.isDrawingLine) {
-          this.drawingLine = { points: [{ x, y }] };
-          this.isDrawingLine = true;
         } else {
-          this.drawingLine.points.push({ x, y });
-          linesLayer.lines.push({ ...this.drawingLine });
-          this.addLineToConsole(this.drawingLine);
-          this.drawingLine = null;
-          this.isDrawingLine = false;
+          if (!this.isDrawingLine) {
+            this.drawingLine = { points: [{ x, y }] };
+            this.isDrawingLine = true;
+          } else {
+            this.drawingLine.points.push({ x, y });
+            linesLayer.lines.push({ ...this.drawingLine });
+            this.addLineToConsole(this.drawingLine);
+            this.drawingLine = null;
+            this.isDrawingLine = false;
+          }
         }
+        return;
       }
-      if (this.tool === 'polygon') {
-        const polygonsLayer = this.ensurePolygonsLayer();
-        const rect = this.canvas.getBoundingClientRect();
-        const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-        const { x, y } = this.canvasToSight(canvasPt);
-        // Если клик по первой вершине и точек >= 3 — замыкаем
-        if (this.isDrawingPolygon && this.drawingPolygon && this.drawingPolygon.points.length >= 3 && this.hoveredPolyVertex && this.hoveredPolyVertex.pointIdx === 0) {
-          polygonsLayer.polygons.push({ points: [...this.drawingPolygon.points] });
-          this.drawingPolygon = null;
-          this.isDrawingPolygon = false;
-          this.hoveredPolyVertex = null;
-          return;
-        }
-        // Начинаем новый многоугольник
-        if (!this.isDrawingPolygon) {
-          this.drawingPolygon = { points: [{ x, y }] };
-          this.isDrawingPolygon = true;
-        } else {
-          // Добавляем вершину
-          this.drawingPolygon.points.push({ x, y });
-        }
-      }
+      this.isCtrlDown = false;
+      this.hoveredVertex = null;
+      this.drawingPolygon = null;
+      this.isDrawingPolygon = false;
+      this.hoveredPolyVertex = null;
+      this.showPreview = false;
     },
     onPointerMove(e) {
       if (this.dragging) {
@@ -541,6 +643,54 @@ export default {
         }
       } else {
         this.hoveredVertex = null;
+      }
+      if (this.tool === 'poligon') {
+        // Подсветка вершин линий и других полигонов
+        let found = null;
+        // Линии
+        const linesLayer = this.layers.find(l => l.name === 'Линии');
+        if (linesLayer && linesLayer.lines) {
+          const rect = this.canvas.getBoundingClientRect();
+          const mx = e.clientX - rect.left;
+          const my = e.clientY - rect.top;
+          let minDist = 15;
+          linesLayer.lines.forEach((line) => {
+            line.points.forEach((pt) => {
+              const c = this.sightToCanvas(pt);
+              const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
+              if (dist < minDist) {
+                minDist = dist;
+                found = { x: pt.x, y: pt.y };
+              }
+            });
+          });
+        }
+        // Многоугольники
+        const poligonLayer = this.layers.find(l => l.name === 'Многоугольники');
+        if (poligonLayer && poligonLayer.poligons) {
+          const rect = this.canvas.getBoundingClientRect();
+          const mx = e.clientX - rect.left;
+          const my = e.clientY - rect.top;
+          let minDist = 15;
+          poligonLayer.poligons.forEach((poly) => {
+            poly.points.forEach((pt) => {
+              const c = this.sightToCanvas(pt);
+              const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
+              if (dist < minDist) {
+                minDist = dist;
+                found = { x: pt.x, y: pt.y };
+              }
+            });
+          });
+        }
+        this.hoveredPolyVertex = found;
+        // Призрак стороны
+        if (!this.isDrawingPolygon || !this.drawingPolygon) return;
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const { x, y } = this.canvasToSight(canvasPt);
+        this.drawingPolygon.ghost = { x, y };
+        return;
       }
       // Призрак линии
       if (this.tool !== 'lines' || !this.isDrawingLine) return;
@@ -714,8 +864,9 @@ export default {
       }
     },
     onExportFile() {
-      // Экспортируем в .blk по заданному формату
+      // Экспортируем в .blk по формату shiroko_nn.blk
       let blk = '';
+      // --- Базовые параметры (можно вынести в отдельный конфиг) ---
       blk += 'crosshairHorVertSize:p2=3, 2\n';
       blk += 'rangefinderProgressBarColor1:c=0, 255, 0, 64\n';
       blk += 'rangefinderProgressBarColor2:c=255, 255, 255, 64\n';
@@ -770,10 +921,37 @@ export default {
       blk += '}\n\n';
       blk += 'crosshair_hor_ranges{\n}\n\n';
       blk += 'matchExpClass {\nexp_tank:b = yes\nexp_heavy_tank:b = yes\nexp_tank_destroyer:b = yes\nexp_SPAA:b = yes\n}\n\n';
+      // --- Экспорт линий ---
       blk += 'drawLines{\n';
-      // Пример: экспортируем все линии (или другие объекты)
-      // Здесь нужно добавить экспорт компонентов (линий и т.д.)
+      const linesLayer = this.layers.find(l => l.name === 'Линии');
+      if (linesLayer && linesLayer.lines) {
+        for (const line of linesLayer.lines) {
+          for (let i = 1; i < line.points.length; i++) {
+            const p1 = line.points[i - 1];
+            const p2 = line.points[i];
+            blk += `  line {line:p4=${p1.x},${p1.y},${p2.x},${p2.y};move:b=false;}\n`;
+          }
+        }
+      }
       blk += '}\n';
+      // --- Экспорт многоугольников (как quads, если 4 точки, иначе как poly) ---
+      blk += 'drawQuads{\n';
+      const poligonLayer = this.layers.find(l => l.name === 'Многоугольники');
+      if (poligonLayer && poligonLayer.poligons) {
+        for (const poly of poligonLayer.poligons) {
+          if (poly.points.length === 4) {
+            blk += `  quad {tl:p2 = ${poly.points[0].x},${poly.points[0].y};tr:p2 = ${poly.points[1].x},${poly.points[1].y};br:p2 = ${poly.points[2].x},${poly.points[2].y};bl:p2 = ${poly.points[3].x},${poly.points[3].y};}\n`;
+          } else if (poly.points.length > 2) {
+            // Разбиваем на треугольники и экспортируем каждый как quad (дублируя последнюю вершину)
+            const tris = this.triangulatePolygon(poly.points);
+            for (const tri of tris) {
+              blk += `  quad {tl:p2 = ${tri[0].x},${tri[0].y};tr:p2 = ${tri[1].x},${tri[1].y};br:p2 = ${tri[2].x},${tri[2].y};bl:p2 = ${tri[2].x},${tri[2].y};}\n`;
+            }
+          }
+        }
+      }
+      blk += '}\n';
+      // --- Сохраняем файл ---
       const blob = new Blob([blk], { type: 'text/plain' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -928,15 +1106,113 @@ export default {
       }
       return layer;
     },
+    // --- Триангуляция многоугольника (ear clipping, возвращает массив треугольников) ---
+    triangulatePolygon(points) {
+      // Используем earcut для надёжной триангуляции
+      if (!points || points.length < 3) return [];
+      const flat = points.flatMap(p => [p.x, p.y]);
+      const indices = earcut(flat);
+      const triangles = [];
+      for (let i = 0; i < indices.length; i += 3) {
+        triangles.push([
+          points[indices[i]],
+          points[indices[i + 1]],
+          points[indices[i + 2]],
+        ]);
+      }
+      return triangles;
+    },
+    openPreview() {
+      this.showPreview = true;
+      this.$nextTick(() => {
+        this.renderPreview();
+      });
+    },
+    renderPreview() {
+      const canvas = this.$refs.previewCanvas;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Центр и масштаб
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const scale = 200; // подбирается под размер
+      // Линии
+      const linesLayer = this.layers.find(l => l.name === 'Линии');
+      ctx.save();
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 2;
+      if (linesLayer && linesLayer.lines) {
+        for (const line of linesLayer.lines) {
+          for (let i = 1; i < line.points.length; i++) {
+            const p1 = line.points[i - 1];
+            const p2 = line.points[i];
+            ctx.beginPath();
+            ctx.moveTo(cx + p1.x * scale, cy - p1.y * scale);
+            ctx.lineTo(cx + p2.x * scale, cy - p2.y * scale);
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.restore();
+      // Многоугольники (через триангуляцию)
+      const poligonLayer = this.layers.find(l => l.name === 'Многоугольники');
+      ctx.save();
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = 'black';
+      if (poligonLayer && poligonLayer.polygons) {
+        for (const poly of poligonLayer.polygons) {
+          if (poly.points.length === 4) {
+            ctx.beginPath();
+            ctx.moveTo(cx + poly.points[0].x * scale, cy - poly.points[0].y * scale);
+            for (let i = 1; i < 4; i++) {
+              ctx.lineTo(cx + poly.points[i].x * scale, cy - poly.points[i].y * scale);
+            }
+            ctx.closePath();
+            ctx.fill();
+          } else if (poly.points.length > 2) {
+            const tris = this.triangulatePolygon(poly.points);
+            for (const tri of tris) {
+              ctx.beginPath();
+              ctx.moveTo(cx + tri[0].x * scale, cy - tri[0].y * scale);
+              ctx.lineTo(cx + tri[1].x * scale, cy - tri[1].y * scale);
+              ctx.lineTo(cx + tri[2].x * scale, cy - tri[2].y * scale);
+              ctx.closePath();
+              ctx.fill();
+            }
+          }
+        }
+      }
+      ctx.restore();
+    },
+    isConvex(points) {
+      if (points.length < 4) return true;
+      let gotNegative = false;
+      let gotPositive = false;
+      const numPoints = points.length;
+      for (let i = 0; i < numPoints; i++) {
+        const p1 = points[i];
+        const p2 = points[(i + 1) % numPoints];
+        const p3 = points[(i + 2) % numPoints];
+        const crossProduct = (p2.x - p1.x) * (p3.y - p2.y) - (p2.y - p1.y) * (p3.x - p2.x);
+        if (crossProduct < 0) {
+          gotNegative = true;
+        } else if (crossProduct > 0) {
+          gotPositive = true;
+        }
+        if (gotNegative && gotPositive) return false;
+      }
+      return true;
+    },
   },
   watch: {
     tool(newTool, oldTool) {
-      if (oldTool === 'polygon') {
+      if (oldTool === 'polygon' || newTool !== 'polygon') {
         this.drawingPolygon = null;
         this.isDrawingPolygon = false;
         this.hoveredPolyVertex = null;
       }
-      if (oldTool === 'lines') {
+      if (oldTool === 'lines' || newTool !== 'lines') {
         this.drawingLine = null;
         this.isDrawingLine = false;
         this.hoveredVertex = null;
