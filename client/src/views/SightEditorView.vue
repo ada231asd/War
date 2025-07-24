@@ -44,48 +44,43 @@
         @select-layer="selectLayer"
         @select-object="selectObject"
         @add-layer="addLayer"
-        @edit-layer="openLayerSettings"
         @lock-layer="toggleLayerLock"
         @delete-layer="deleteLayer"
         @move-layer="moveLayer"
         @edit-layer-name="editLayerName"
+        @set-layer-opacity="setLayerOpacity"
         style="position: fixed; right: 2em; top: 2em;"
       />
-      <div id="infoMenu" class="menuIsland" style="right: 1em; bottom: 1em; text-align: center">
-        <hr id="infoMenuDragger" size="10px" style="background-color: lightgray">
-        <b id="selObjectTitle">Выбранный объект</b>
-        <table id="infoTable"></table>
-        <button id="infoDeleteButton" style="display: none">Удалить объект</button>
-      </div>
+      
       <div id="hints" style="text-align: center; margin: auto; font-size: 0.8em; user-select: none;">
         <span id="hintsText"></span>
       </div>
       <a id="saver"></a>
-      <!-- Окно предпросмотра -->
-      <div v-if="showPreview" class="modal-overlay">
-        <div class="modal-window">
-          <h3>Предпросмотр экспорта (.blk)</h3>
-          <canvas ref="previewCanvas" width="600" height="400" style="background:#fff; border:1px solid #333;"></canvas>
-          <div style="margin-top:1em; text-align:right;">
-            <button @click="showPreview=false">Закрыть</button>
+      <button class="help-btn" @click="showHelp = true" title="Горячие клавиши" style="position:fixed;top:1em;left:1em;z-index:1001;background:#23272f;color:#ffd700;border:none;border-radius:50%;width:40px;height:40px;font-size:1.7em;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px #0006;cursor:pointer;">
+        ?
+      </button>
+      <div v-if="showHelp" class="modal-overlay">
+        <div class="modal-window" style="max-width:520px;">
+          <h3>Горячие клавиши и управление</h3>
+          <ul style="text-align:left;font-size:1.1em;line-height:1.7;">
+            <li><b>Alt + колесо мыши</b> — Масштабирование холста</li>
+            <li><b>ПКМ (правая кнопка мыши)</b> — Перемещение холста</li>
+            <li><b>Ctrl + клик</b> — Привязка к ближайшей вершине</li>
+            <li><b>Shift + клик (инструмент Многоугольник)</b> — Выделить многоугольник</li>
+            <li><b>Delete</b> — Удалить выбранный объект/многоугольник</li>
+            <li><b>Insert</b> — Удалить выбранный объект (инструмент Выборка)</li>
+            <li><b>Alt + T / Alt + М</b> — Свободная трансформация слоя</li>
+            <li><b>ЛКМ</b> — Добавить точку (линия/многоугольник)</li>
+            <li><b>ЛКМ по первой точке (многоугольник)</b> — Замкнуть многоугольник</li>
+            <li><b>ЛКМ по объекту (инструмент Выборка)</b> — Выделить объект</li>
+            <li><b>Enter</b> — Подтвердить ввод имени слоя</li>
+          </ul>
+          <div style="text-align:right;margin-top:1.5em;">
+            <button @click="showHelp = false" style="background:#23272f;color:#ffd700;border:1px solid #ffd700;border-radius:6px;padding:0.5em 1.2em;font-size:1.1em;cursor:pointer;">Закрыть</button>
           </div>
         </div>
       </div>
     </div>
-    <!-- Модальное окно настроек слоя -->
-    <div v-if="showLayerSettings" class="modal-overlay">
-      <div class="modal-window">
-        <h3>Настройки слоя</h3>
-        <label>Прозрачность (0-100%):
-          <input type="number" v-model.number="layerSettingsOpacity" min="0" max="100" />
-        </label>
-        <div style="margin-top:1em; text-align:right;">
-          <button @click="applyLayerSettings">OK</button>
-          <button @click="closeLayerSettings">Отмена</button>
-        </div>
-      </div>
-    </div>
-    <button style="position:fixed;top:1em;right:1em;z-index:1001" @click="openPreview">Предпросмотр .blk</button>
   </div>
 </template>
 
@@ -136,9 +131,6 @@ export default {
       layers: [],
       selectedLayerId: null,
       selectedObjectId: null,
-      showLayerSettings: false,
-      layerSettingsId: null,
-      layerSettingsOpacity: 100,
       drawingLine: null, // временная линия (points: [{x, y}, ...])
       isDrawingLine: false, // флаг рисования линии
       isCtrlDown: false, // для поддержки Ctrl
@@ -147,10 +139,10 @@ export default {
       drawingPolygon: null, // { points: [{x, y}, ...] }
       isDrawingPolygon: false,
       hoveredPolyVertex: null, // {polyIdx, pointIdx, x, y}
-      showPreview: false,
       selectedPolygonIdx: null, // индекс выделенного многоугольника
       hoveredSnapVertex: null, // универсальная подсветка вершины
       selectedElement: null, // выбранный элемент для инструмента выборка
+      showHelp: false,
     };
   },
   mounted() {
@@ -202,6 +194,7 @@ export default {
       this.drawReference();
       this.drawGrid();
       this.drawCrosshair();
+      // --- заливаем области из fills ---
       this.drawStuff();
       this.drawArrows();
       this.drawGhost();
@@ -780,7 +773,6 @@ export default {
       this.drawingPolygon = null;
       this.isDrawingPolygon = false;
       this.hoveredPolyVertex = null;
-      this.showPreview = false;
     },
     onPointerMove(e) {
       if (this.dragging) {
@@ -789,6 +781,67 @@ export default {
         this.screenPos.x -= dx;
         this.screenPos.y -= dy;
         this.lastDragPos = { x: e.clientX, y: e.clientY };
+        return;
+      }
+      // --- Перемещение/трансформация слоя ---
+      if (this.isTransforming && this.selectedLayerId) {
+        const layer = this.layers.find(l => l.id === this.selectedLayerId && l.img);
+        if (layer && this.transformStart) {
+          const rect = this.canvas.getBoundingClientRect();
+          const mx = e.clientX - rect.left;
+          const my = e.clientY - rect.top;
+          const dx = (mx - this.transformStart.x) / (this.screenZoom * 2000);
+          const dy = (my - this.transformStart.y) / (this.screenZoom * 2000);
+          if (this.transformMode === 'move') {
+            layer.shiftX = this.transformStart.shiftX + dx;
+            layer.shiftY = this.transformStart.shiftY + dy;
+          } else if (this.transformMode && this.transformMode.startsWith('resize')) {
+            // Определяем, какой маркер тянем
+            let w = this.transformStart.width;
+            let h = this.transformStart.height;
+            let x = this.transformStart.shiftX;
+            let y = this.transformStart.shiftY;
+            // Для простоты: resize от центра, меняем ширину/высоту и сдвиг
+            if (this.transformMode === 'resize-tl') {
+              w = this.transformStart.width - dx;
+              h = this.transformStart.height - dy;
+              x = this.transformStart.shiftX + dx / 2;
+              y = this.transformStart.shiftY + dy / 2;
+            } else if (this.transformMode === 'resize-tr') {
+              w = this.transformStart.width + dx;
+              h = this.transformStart.height - dy;
+              x = this.transformStart.shiftX + dx / 2;
+              y = this.transformStart.shiftY + dy / 2;
+            } else if (this.transformMode === 'resize-br') {
+              w = this.transformStart.width + dx;
+              h = this.transformStart.height + dy;
+              x = this.transformStart.shiftX + dx / 2;
+              y = this.transformStart.shiftY + dy / 2;
+            } else if (this.transformMode === 'resize-bl') {
+              w = this.transformStart.width - dx;
+              h = this.transformStart.height + dy;
+              x = this.transformStart.shiftX + dx / 2;
+              y = this.transformStart.shiftY + dy / 2;
+            } else if (this.transformMode === 'resize-t') {
+              h = this.transformStart.height - dy;
+              y = this.transformStart.shiftY + dy / 2;
+            } else if (this.transformMode === 'resize-b') {
+              h = this.transformStart.height + dy;
+              y = this.transformStart.shiftY + dy / 2;
+            } else if (this.transformMode === 'resize-l') {
+              w = this.transformStart.width - dx;
+              x = this.transformStart.shiftX + dx / 2;
+            } else if (this.transformMode === 'resize-r') {
+              w = this.transformStart.width + dx;
+              x = this.transformStart.shiftX + dx / 2;
+            }
+            // Минимальные размеры
+            layer.width = Math.max(0.01, w);
+            layer.height = Math.max(0.01, h);
+            layer.shiftX = x;
+            layer.shiftY = y;
+          }
+        }
         return;
       }
       // Универсальная подсветка вершины для любого инструмента
@@ -846,6 +899,14 @@ export default {
           }
         }
         if (hit) break;
+        // --- Исправление: свободная трансформация только при tool === 'select' ---
+        if (this.tool === 'select' && this.freeTransform && this.selectedLayerId === layer.id && layer.img && mx >= from.x && mx <= to.x && my >= from.y && my <= to.y) {
+          this.isTransforming = true;
+          this.transformMode = 'move';
+          this.transformStart = { x: mx, y: my, ...layer };
+          hit = true;
+          break;
+        }
         if (mx >= from.x && mx <= to.x && my >= from.y && my <= to.y) {
           this.selectedLayerId = layer.id;
           this.isTransforming = true;
@@ -979,7 +1040,7 @@ export default {
         alert('Ошибка загрузки файла: ' + e.message);
       }
     },
-    onExportFile() {
+    onExportFile(fileName) {
       // Экспортируем в .blk по формату shiroko_nn.blk
       let blk = '';
       // --- Базовые параметры (можно вынести в отдельный конфиг) ---
@@ -1071,7 +1132,7 @@ export default {
       const blob = new Blob([blk], { type: 'text/plain' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'export.blk';
+      a.download = (fileName || 'export') + '.blk';
       a.click();
       URL.revokeObjectURL(a.href);
     },
@@ -1135,23 +1196,7 @@ export default {
         { x: from.x, y: (from.y + to.y) / 2, type: 'resize-l' },
       ];
     },
-    openLayerSettings(id) {
-      this.layerSettingsId = id;
-      const layer = this.layers.find(l => l.id === id);
-      this.layerSettingsOpacity = layer ? Math.round((layer.opacity ?? 1) * 100) : 100;
-      this.showLayerSettings = true;
-    },
-    closeLayerSettings() {
-      this.showLayerSettings = false;
-      this.layerSettingsId = null;
-    },
-    applyLayerSettings() {
-      const layer = this.layers.find(l => l.id === this.layerSettingsId);
-      if (layer) {
-        layer.opacity = Math.max(0, Math.min(1, this.layerSettingsOpacity / 100));
-      }
-      this.closeLayerSettings();
-    },
+    // openLayerSettings() {}, closeLayerSettings() {}, applyLayerSettings() {} // удалены
     resetSelectedLayerSize() {
       const layer = this.getSelectedLayer();
       if (layer && layer.img) {
@@ -1238,69 +1283,6 @@ export default {
       }
       return triangles;
     },
-    openPreview() {
-      this.showPreview = true;
-      this.$nextTick(() => {
-        this.renderPreview();
-      });
-    },
-    renderPreview() {
-      const canvas = this.$refs.previewCanvas;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      // Центр и масштаб
-      const cx = canvas.width / 2;
-      const cy = canvas.height / 2;
-      const scale = 200; // подбирается под размер
-      // Линии
-      const linesLayer = this.layers.find(l => l.name === 'Линии');
-      ctx.save();
-      ctx.strokeStyle = 'black';
-      ctx.lineWidth = 2;
-      if (linesLayer && linesLayer.lines) {
-        for (const line of linesLayer.lines) {
-          for (let i = 1; i < line.points.length; i++) {
-            const p1 = line.points[i - 1];
-            const p2 = line.points[i];
-            ctx.beginPath();
-            ctx.moveTo(cx + p1.x * scale, cy - p1.y * scale);
-            ctx.lineTo(cx + p2.x * scale, cy - p2.y * scale);
-            ctx.stroke();
-          }
-        }
-      }
-      ctx.restore();
-      // Многоугольники (через триангуляцию)
-      const poligonLayer = this.layers.find(l => l.name === 'Многоугольники');
-      ctx.save();
-      ctx.globalAlpha = 0.7;
-      ctx.fillStyle = 'black';
-      if (poligonLayer && poligonLayer.polygons) {
-        for (const poly of poligonLayer.polygons) {
-          if (poly.points.length === 4) {
-            ctx.beginPath();
-            ctx.moveTo(cx + poly.points[0].x * scale, cy - poly.points[0].y * scale);
-            for (let i = 1; i < 4; i++) {
-              ctx.lineTo(cx + poly.points[i].x * scale, cy - poly.points[i].y * scale);
-            }
-            ctx.closePath();
-            ctx.fill();
-          } else if (poly.points.length > 2) {
-            const tris = this.triangulatePolygon(poly.points);
-            for (const tri of tris) {
-              ctx.beginPath();
-              ctx.moveTo(cx + tri[0].x * scale, cy - tri[0].y * scale);
-              ctx.lineTo(cx + tri[1].x * scale, cy - tri[1].y * scale);
-              ctx.lineTo(cx + tri[2].x * scale, cy - tri[2].y * scale);
-              ctx.closePath();
-              ctx.fill();
-            }
-          }
-        }
-      }
-      ctx.restore();
-    },
     isConvex(points) {
       if (points.length < 4) return true;
       let gotNegative = false;
@@ -1378,6 +1360,10 @@ export default {
       });
       return found;
     },
+    setLayerOpacity({id, opacity}) {
+      const layer = this.layers.find(l => l.id === id);
+      if (layer) layer.opacity = opacity;
+    },
   },
   watch: {
     tool(newTool, oldTool) {
@@ -1399,6 +1385,7 @@ export default {
 <style scoped>
 body {
   background: #fff;
+  overflow-x: hidden;
 }
 .editor-bg {
   /* min-height: 100vh; */
@@ -1406,6 +1393,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow-x: hidden;
 }
 .editor-area {
   position: relative;
@@ -1416,6 +1404,7 @@ body {
   /* box-shadow: 0 0 40px #0004; */
   /* border-radius: 1em; */
   overflow: hidden;
+  overflow-x: hidden;
 }
 #mainCanvas {
   position: absolute;
@@ -1545,5 +1534,27 @@ a {
   filter: brightness(1.3) drop-shadow(0 0 8px #ffd70088);
   box-shadow: 0 0 0 2px #ffd700;
   border-radius: 8px;
+}
+.help-btn {
+  position: fixed;
+  top: 1em;
+  left: 1em;
+  z-index: 1001;
+  background: #23272f;
+  color: #ffd700;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 1.7em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px #0006;
+  cursor: pointer;
+}
+.help-btn:hover {
+  background: #ffd700;
+  color: #23272f;
 }
 </style>

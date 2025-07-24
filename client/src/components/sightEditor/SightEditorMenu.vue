@@ -86,7 +86,7 @@ export default {
       reader.readAsText(file);
     },
     exportFile() {
-      this.$emit('export');
+      this.$emit('export', this.saveFileName);
     },
     toggleAutosave() {
       this.$emit('toggle-autosave', !this.autoSaveEnabled);

@@ -1,119 +1,22 @@
 <template>
-  <div class="community-view">
-    <section class="community-header">
-      <h1>Сообщество</h1>
-      <p>Присоединяйтесь к сообществу разработчиков и энтузиастов War Thunder</p>
-    </section>
-
-    <section class="community-content">
-      <div class="community-grid">
-        <div class="community-card discord">
-          <div class="card-icon">
-            <img src="../assets/images/discord-icon.svg" alt="Discord">
-          </div>
-          <h3>Discord</h3>
-          <p>Присоединяйтесь к нашему Discord-серверу для общения и обмена опытом</p>
-          <a href="#" class="btn btn-primary">Присоединиться</a>
-        </div>
-
-        <div class="community-card vk">
-          <div class="card-icon">
-            <img src="../assets/images/vk-icon.svg" alt="VK">
-          </div>
-          <h3>ВКонтакте</h3>
-          <p>Следите за новостями и общайтесь в нашей группе ВКонтакте</p>
-          <a href="#" class="btn btn-primary">Подписаться</a>
-        </div>
-
-        <div class="community-card reddit">
-          <div class="card-icon">
-            <img src="../assets/images/reddit-icon.svg" alt="Reddit">
-          </div>
-          <h3>Reddit</h3>
-          <p>Участвуйте в обсуждениях на нашем сабреддите</p>
-          <a href="#" class="btn btn-primary">Присоединиться</a>
-        </div>
-
-        <div class="community-card youtube">
-          <div class="card-icon">
-            <img src="../assets/images/youtube-icon.svg" alt="YouTube">
-          </div>
-          <h3>YouTube</h3>
-          <p>Смотрите обучающие видео и обзоры на нашем канале</p>
-          <a href="#" class="btn btn-primary">Подписаться</a>
-        </div>
+  <div class="community-view" style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:2em;color:#ffd700;background:#23272f;flex-direction:column;">
+    <h1>Сообщество</h1>
+    <p>Страница сообщества находится в разработке.<br>Примерный функционал: обсуждения, новости, конкурсы, поддержка.</p>
+    <div style="margin-top:2em;font-size:1.1em;color:#fff;background:#23272f;padding:1.5em 2em;border-radius:1em;box-shadow:0 2px 16px #0008;max-width:600px;text-align:center;">
+      <b>Мы сотрудничаем с полком <span style='color:#ffd700;'>KIVOT</span>!</b><br>
+      <div style="margin-top:0.7em;">
+        <a href="https://discord.gg/K883Dstznr" target="_blank" style="color:#7289da;text-decoration:underline;font-weight:500;">Discord полка KIVOT</a><br>
+        <a href="https://t.me/+_ckKwzhPX6w2NWIy" target="_blank" style="color:#229ed9;text-decoration:underline;font-weight:500;">Telegram-канал KIVOT</a><br>
+        <a href="https://t.me/+z3AjsTCRgDpkZWNi" target="_blank" style="color:#229ed9;text-decoration:underline;font-weight:500;">Telegram-чат сайта</a>
       </div>
-
-      <div class="community-features">
-        <h2>Возможности сообщества</h2>
-        <div class="features-grid">
-          <div class="feature-card">
-            <h3>Обмен опытом</h3>
-            <p>Делитесь своими знаниями и учитесь у других участников сообщества</p>
-          </div>
-          <div class="feature-card">
-            <h3>Совместная работа</h3>
-            <p>Создавайте проекты вместе с другими разработчиками</p>
-          </div>
-          <div class="feature-card">
-            <h3>Конкурсы</h3>
-            <p>Участвуйте в конкурсах и выигрывайте призы</p>
-          </div>
-          <div class="feature-card">
-            <h3>Поддержка</h3>
-            <p>Получайте помощь от опытных участников сообщества</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="community-news">
-        <h2>Последние новости</h2>
-        <div class="news-grid">
-          <article class="news-card" v-for="news in newsItems" :key="news.id">
-            <div class="news-image">
-              <img :src="news.image" :alt="news.title">
-            </div>
-            <div class="news-content">
-              <h3>{{ news.title }}</h3>
-              <p>{{ news.excerpt }}</p>
-              <div class="news-meta">
-                <span class="news-date">{{ news.date }}</span>
-                <a href="#" class="read-more">Читать далее</a>
-              </div>
-            </div>
-          </article>
-        </div>
-      </div>
-    </section>
+    </div>
   </div>
 </template>
 
-<script setup>
-import { ref } from 'vue'
-
-const newsItems = ref([
-  {
-    id: 1,
-    title: 'Новый конкурс скинов',
-    excerpt: 'Примите участие в конкурсе на лучший скин для новых самолетов',
-    image: '../assets/images/community/news-1.jpg',
-    date: '15 марта 2024'
-  },
-  {
-    id: 2,
-    title: 'Обновление редактора прицелов',
-    excerpt: 'Добавлены новые функции для создания прицелов',
-    image: '../assets/images/community/news-2.jpg',
-    date: '12 марта 2024'
-  },
-  {
-    id: 3,
-    title: 'Встреча сообщества',
-    excerpt: 'Онлайн-встреча с разработчиками и активными участниками',
-    image: '../assets/images/community/news-3.jpg',
-    date: '10 марта 2024'
-  }
-])
+<script>
+export default {
+  name: 'CommunityView',
+};
 </script>
 
 <style lang="scss">

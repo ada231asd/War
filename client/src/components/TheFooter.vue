@@ -21,28 +21,24 @@
 
           <div class="footer-section">
             <h3>Сообщество</h3>
-            <a href="#" class="social-link">
+            <a href="https://discord.gg/K883Dstznr" class="social-link" target="_blank">
               <img src="../assets/images/discord-icon.svg" alt="Discord">
-              Discord
+              Discord KIVOT
             </a>
-            <a href="#" class="social-link">
-              <img src="../assets/images/vk-icon.svg" alt="VK">
-              VK
+            <a href="https://t.me/+_ckKwzhPX6w2NWIy" class="social-link" target="_blank">
+              <img src="../assets/images/telegram-icon.svg" alt="Telegram" style="background:#229ed9;border-radius:50%;">
+              Telegram KIVOT
             </a>
-            <a href="#" class="social-link">
-              <img src="../assets/images/reddit-icon.svg" alt="Reddit">
-              Reddit
-            </a>
-            <a href="#" class="social-link">
-              <img src="../assets/images/youtube-icon.svg" alt="YouTube">
-              YouTube
+            <a href="https://t.me/+z3AjsTCRgDpkZWNi" class="social-link" target="_blank">
+              <img src="../assets/images/telegram-icon.svg" alt="Telegram" style="background:#229ed9;border-radius:50%;">
+              Telegram-чат сайта
             </a>
           </div>
 
           <div class="footer-section">
             <h3>Поддержка</h3>
             <router-link to="/faq">FAQ</router-link>
-            <router-link to="/contact">Контакты</router-link>
+            <a href="https://discord.gg/K883Dstznr" target="_blank">Контакты (Discord KIVOT)</a>
             <router-link to="/privacy">Политика конфиденциальности</router-link>
             <router-link to="/terms">Условия использования</router-link>
           </div>

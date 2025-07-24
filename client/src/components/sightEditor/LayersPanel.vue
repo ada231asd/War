@@ -11,8 +11,11 @@
           <span class="layer-action" @click.stop="moveLayer(layer.id, -1)" :class="{disabled: idx === 0}">⬆️</span>
           <span class="layer-action" @click.stop="moveLayer(layer.id, 1)" :class="{disabled: idx === layers.length-1}">⬇️</span>
           <span class="layer-action" @click.stop="deleteLayer(layer.id)">🗑️</span>
-          <span class="layer-settings" @click.stop="editLayer(layer.id)">⚙️</span>
         </span>
+        <div v-if="!layer.locked" class="layer-opacity">
+          <input type="range" min="0" max="1" step="0.01" :value="layer.opacity ?? 1" @input="onOpacityChange(layer.id, $event)" />
+          <span class="opacity-value">{{ Math.round((layer.opacity ?? 1) * 100) }}%</span>
+        </div>
       </div>
     </div>
     <button @click="addLayer">Добавить слой</button>
@@ -26,7 +29,7 @@ export default {
     layers: Array,
     selectedLayerId: String
   },
-  emits: ['select-layer', 'add-layer', 'edit-layer', 'lock-layer', 'delete-layer', 'move-layer', 'edit-layer-name'],
+  emits: ['select-layer', 'add-layer', 'edit-layer', 'lock-layer', 'delete-layer', 'move-layer', 'edit-layer-name', 'set-layer-opacity'],
   data() {
     return {
       editNameId: null,
@@ -67,6 +70,10 @@ export default {
       }
       this.editNameId = null;
       this.editNameValue = '';
+    },
+    onOpacityChange(id, event) {
+      const value = parseFloat(event.target.value);
+      this.$emit('set-layer-opacity', {id, opacity: value});
     }
   }
 };
