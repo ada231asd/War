@@ -4,6 +4,13 @@
       <!-- Tool panel -->
       <div class="tool-panel">
         <img
+          src="@/assets/images/tools/mause.png"
+          alt="Выборка"
+          class="tool-icon"
+          :class="{ active: tool === 'select' }"
+          @click="tool = 'select'"
+        />
+        <img
           src="@/assets/images/tools/line.png"
           alt="Линия"
           class="tool-icon"
@@ -65,7 +72,6 @@
         </div>
       </div>
     </div>
-    <ConsolePanel :log="consoleLog" style="width: 100%; height: 220px; min-height: 120px; max-height: 320px; border-top: 1px solid #333;" />
     <!-- Модальное окно настроек слоя -->
     <div v-if="showLayerSettings" class="modal-overlay">
       <div class="modal-window">
@@ -87,13 +93,12 @@
 import editorConfig from '../sightEditor/config';
 import SightEditorMenu from '../components/sightEditor/SightEditorMenu.vue';
 import LayersPanel from '../components/sightEditor/LayersPanel.vue';
-import ConsolePanel from '../components/sightEditor/ConsolePanel.vue';
 import { drawPolygons, drawGhostPolygon, findNearestVertex as findNearestPolyVertex } from '../components/sightEditor/tools/polygonTool.js';
 import earcut from 'earcut';
 
 export default {
   name: 'SightEditorView',
-  components: { SightEditorMenu, LayersPanel, ConsolePanel },
+  components: { SightEditorMenu, LayersPanel },
   data() {
     return {
       screenPos: { x: 0, y: 0.1 },
@@ -134,7 +139,6 @@ export default {
       showLayerSettings: false,
       layerSettingsId: null,
       layerSettingsOpacity: 100,
-      consoleLog: [],
       drawingLine: null, // временная линия (points: [{x, y}, ...])
       isDrawingLine: false, // флаг рисования линии
       isCtrlDown: false, // для поддержки Ctrl
@@ -144,6 +148,9 @@ export default {
       isDrawingPolygon: false,
       hoveredPolyVertex: null, // {polyIdx, pointIdx, x, y}
       showPreview: false,
+      selectedPolygonIdx: null, // индекс выделенного многоугольника
+      hoveredSnapVertex: null, // универсальная подсветка вершины
+      selectedElement: null, // выбранный элемент для инструмента выборка
     };
   },
   mounted() {
@@ -157,12 +164,16 @@ export default {
     this.render();
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('keydown', this.onDeletePolygon); // для Delete
+    window.addEventListener('keydown', this.onDeleteOrInsertSelected);
   },
   beforeUnmount() {
     window.removeEventListener('resize', this.updateCanvasSize);
     window.removeEventListener('wheel', this.onWheel);
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('keydown', this.onDeletePolygon);
+    window.removeEventListener('keydown', this.onDeleteOrInsertSelected);
   },
   methods: {
     el(id) {
@@ -197,18 +208,33 @@ export default {
       // --- polygons ---
       const polygonsLayer = this.ensurePolygonsLayer();
       drawPolygons(this.ctx, polygonsLayer.polygons, this.screenPos, this.screenZoom, this.canvas.width, this.canvas.height);
-      // Подсветка всех вершин всех многоугольников
-      this.ctx.save();
-      this.ctx.fillStyle = 'rgba(120,120,120,0.4)';
-      polygonsLayer.polygons.forEach(polygon => {
-        polygon.points.forEach(pt => {
-          const c = this.sightToCanvas(pt);
-          this.ctx.beginPath();
-          this.ctx.arc(c.x, c.y, 10, 0, 2 * Math.PI);
-          this.ctx.fill();
-        });
-      });
-      this.ctx.restore();
+      // Подсветка выделенного многоугольника
+      if (this.selectedPolygonIdx !== null && polygonsLayer.polygons[this.selectedPolygonIdx]) {
+        const poly = polygonsLayer.polygons[this.selectedPolygonIdx];
+        this.ctx.save();
+        this.ctx.strokeStyle = '#ffd700';
+        this.ctx.lineWidth = 4;
+        this.ctx.beginPath();
+        const first = this.sightToCanvas(poly.points[0]);
+        this.ctx.moveTo(first.x, first.y);
+        for (let i = 1; i < poly.points.length; i++) {
+          const pt = this.sightToCanvas(poly.points[i]);
+          this.ctx.lineTo(pt.x, pt.y);
+        }
+        this.ctx.closePath();
+        this.ctx.stroke();
+        this.ctx.restore();
+      }
+      // Подсветка ближайшей вершины при зажатом Ctrl и наведении (жёлтый кружок)
+      if (this.isCtrlDown && this.hoveredSnapVertex) {
+        this.ctx.save();
+        this.ctx.beginPath();
+        const c = this.sightToCanvas(this.hoveredSnapVertex);
+        this.ctx.arc(c.x, c.y, 12, 0, 2 * Math.PI);
+        this.ctx.fillStyle = 'rgba(255,215,0,0.5)';
+        this.ctx.fill();
+        this.ctx.restore();
+      }
       if (this.tool === 'polygon' && this.isDrawingPolygon && this.drawingPolygon && this.drawingPolygon.points.length > 0) {
         drawGhostPolygon(this.ctx, this.drawingPolygon.points, this.drawingPolygon.ghost, this.screenPos, this.screenZoom, this.canvas.width, this.canvas.height);
         // Подсветка первой вершины строящегося многоугольника
@@ -219,6 +245,45 @@ export default {
         this.ctx.fillStyle = 'rgba(0,0,0,0.2)';
         this.ctx.fill();
         this.ctx.restore();
+      }
+      // Подсветка выбранного элемента для инструмента выборка
+      if (this.tool === 'select' && this.selectedElement) {
+        if (this.selectedElement.type === 'line') {
+          const linesLayer = this.layers.find(l => l.name === 'Линии');
+          if (linesLayer && linesLayer.lines && linesLayer.lines[this.selectedElement.idx]) {
+            const line = linesLayer.lines[this.selectedElement.idx];
+            this.ctx.save();
+            this.ctx.strokeStyle = '#ffd700';
+            this.ctx.lineWidth = 4;
+            this.ctx.beginPath();
+            const start = this.sightToCanvas(line.points[0]);
+            this.ctx.moveTo(start.x, start.y);
+            for (let i = 1; i < line.points.length; i++) {
+              const pt = this.sightToCanvas(line.points[i]);
+              this.ctx.lineTo(pt.x, pt.y);
+            }
+            this.ctx.stroke();
+            this.ctx.restore();
+          }
+        } else if (this.selectedElement.type === 'polygon') {
+          const polygonsLayer = this.ensurePolygonsLayer();
+          if (polygonsLayer.polygons && polygonsLayer.polygons[this.selectedElement.idx]) {
+            const poly = polygonsLayer.polygons[this.selectedElement.idx];
+            this.ctx.save();
+            this.ctx.strokeStyle = '#ffd700';
+            this.ctx.lineWidth = 4;
+            this.ctx.beginPath();
+            const first = this.sightToCanvas(poly.points[0]);
+            this.ctx.moveTo(first.x, first.y);
+            for (let i = 1; i < poly.points.length; i++) {
+              const pt = this.sightToCanvas(poly.points[i]);
+              this.ctx.lineTo(pt.x, pt.y);
+            }
+            this.ctx.closePath();
+            this.ctx.stroke();
+            this.ctx.restore();
+          }
+        }
       }
       requestAnimationFrame(this.render);
     },
@@ -542,13 +607,116 @@ export default {
       this.selectedLayerId = layer.id;
       return layer;
     },
+    // Вспомогательная функция: расстояние от точки до отрезка
+    pointToSegmentDist(px, py, x1, y1, x2, y2) {
+      const A = px - x1;
+      const B = py - y1;
+      const C = x2 - x1;
+      const D = y2 - y1;
+      const dot = A * C + B * D;
+      const len_sq = C * C + D * D;
+      let param = -1;
+      if (len_sq !== 0) param = dot / len_sq;
+      let xx, yy;
+      if (param < 0) { xx = x1; yy = y1; }
+      else if (param > 1) { xx = x2; yy = y2; }
+      else { xx = x1 + param * C; yy = y1 + param * D; }
+      const dx = px - xx;
+      const dy = py - yy;
+      return Math.sqrt(dx * dx + dy * dy);
+    },
+    // Вспомогательная функция: точка внутри многоугольника
+    pointInPolygon(px, py, points) {
+      let inside = false;
+      for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const xi = points[i].x, yi = points[i].y;
+        const xj = points[j].x, yj = points[j].y;
+        const intersect = ((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi + 0.00001) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    },
     onCanvasClick(e) {
+      if (this.tool === 'select') {
+        let minDist = 30;
+        let foundType = null;
+        let foundIdx = null;
+        const rect = this.canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        // Линии: ищем ближайший сегмент
+        const linesLayer = this.layers.find(l => l.name === 'Линии');
+        if (linesLayer && linesLayer.lines) {
+          linesLayer.lines.forEach((line, idx) => {
+            for (let i = 1; i < line.points.length; i++) {
+              const c1 = this.sightToCanvas(line.points[i - 1]);
+              const c2 = this.sightToCanvas(line.points[i]);
+              const dist = this.pointToSegmentDist(mx, my, c1.x, c1.y, c2.x, c2.y);
+              if (dist < minDist) {
+                minDist = dist;
+                foundType = 'line';
+                foundIdx = idx;
+              }
+            }
+          });
+        }
+        // Многоугольники: если курсор внутри — выбираем, иначе ищем ближайшее ребро
+        const polygonsLayer = this.ensurePolygonsLayer();
+        polygonsLayer.polygons.forEach((poly, idx) => {
+          const screenPoints = poly.points.map(pt => this.sightToCanvas(pt));
+          if (this.pointInPolygon(mx, my, screenPoints)) {
+            minDist = 0; // приоритет
+            foundType = 'polygon';
+            foundIdx = idx;
+          } else {
+            for (let i = 1; i <= screenPoints.length; i++) {
+              const c1 = screenPoints[i - 1];
+              const c2 = screenPoints[i % screenPoints.length];
+              const dist = this.pointToSegmentDist(mx, my, c1.x, c1.y, c2.x, c2.y);
+              if (dist < minDist) {
+                minDist = dist;
+                foundType = 'polygon';
+                foundIdx = idx;
+              }
+            }
+          }
+        });
+        if (foundType) {
+          this.selectedElement = { type: foundType, idx: foundIdx };
+        } else {
+          this.selectedElement = null;
+        }
+        return;
+      }
+      // --- Выделение многоугольника по Shift+ЛКМ ---
+      if (this.tool === 'polygon' && e.shiftKey) {
+        const polygonsLayer = this.ensurePolygonsLayer();
+        const rect = this.canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        let minDist = 9999;
+        let foundIdx = null;
+        polygonsLayer.polygons.forEach((poly, idx) => {
+          // Проверяем расстояние до центра масс
+          const cx = poly.points.reduce((sum, p) => sum + p.x, 0) / poly.points.length;
+          const cy = poly.points.reduce((sum, p) => sum + p.y, 0) / poly.points.length;
+          const c = this.sightToCanvas({ x: cx, y: cy });
+          const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
+          if (dist < minDist && dist < 50) { // 50px радиус
+            minDist = dist;
+            foundIdx = idx;
+          }
+        });
+        this.selectedPolygonIdx = foundIdx;
+        return;
+      }
+      // --- Создание многоугольника с возможностью присоединения к вершинам линий и многоугольников ---
       if (this.tool === 'polygon') {
         const poligonLayer = this.ensurePolygonsLayer();
         const rect = this.canvas.getBoundingClientRect();
         const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         const { x, y } = this.canvasToSight(canvasPt);
-        let snapVertex = this.hoveredVertex || this.hoveredPolyVertex;
+        let snapVertex = this.isCtrlDown ? this.hoveredSnapVertex : null;
         const newPoint = snapVertex ? { x: snapVertex.x, y: snapVertex.y } : { x, y };
 
         if (!this.isDrawingPolygon) {
@@ -583,15 +751,15 @@ export default {
         const rect = this.canvas.getBoundingClientRect();
         const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         const { x, y } = this.canvasToSight(canvasPt);
-        if (this.isCtrlDown && this.hoveredVertex) {
+        let snapVertex = this.isCtrlDown ? this.hoveredSnapVertex : null;
+        if (this.isCtrlDown && snapVertex) {
           if (this.isDrawingLine) {
-            this.drawingLine.points.push({ x: this.hoveredVertex.x, y: this.hoveredVertex.y });
+            this.drawingLine.points.push({ x: snapVertex.x, y: snapVertex.y });
             linesLayer.lines.push({ ...this.drawingLine });
-            this.addLineToConsole(this.drawingLine);
             this.drawingLine = null;
             this.isDrawingLine = false;
           } else {
-            this.drawingLine = { points: [{ x: this.hoveredVertex.x, y: this.hoveredVertex.y }] };
+            this.drawingLine = { points: [{ x: snapVertex.x, y: snapVertex.y }] };
             this.isDrawingLine = true;
           }
         } else {
@@ -601,7 +769,6 @@ export default {
           } else {
             this.drawingLine.points.push({ x, y });
             linesLayer.lines.push({ ...this.drawingLine });
-            this.addLineToConsole(this.drawingLine);
             this.drawingLine = null;
             this.isDrawingLine = false;
           }
@@ -624,81 +791,30 @@ export default {
         this.lastDragPos = { x: e.clientX, y: e.clientY };
         return;
       }
-      if (this.tool === 'polygon') {
-        // Поиск ближайшей вершины только среди строящегося многоугольника
-        if (this.isDrawingPolygon && this.drawingPolygon && this.drawingPolygon.points.length > 0) {
-          const rect = this.canvas.getBoundingClientRect();
-          const mx = e.clientX - rect.left;
-          const my = e.clientY - rect.top;
-          // Только по первой вершине
-          const first = this.drawingPolygon.points[0];
-          const c = this.sightToCanvas(first);
-          const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
-          this.hoveredPolyVertex = (dist < 15) ? { polyIdx: -1, pointIdx: 0, x: first.x, y: first.y } : null;
-          // Призрак
-          const { x, y } = this.canvasToSight({ x: mx, y: my });
-          this.drawingPolygon.ghost = { x, y };
-        } else {
-          this.hoveredPolyVertex = null;
-        }
+      // Универсальная подсветка вершины для любого инструмента
+      if (this.isCtrlDown) {
+        const rect = this.canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        this.hoveredSnapVertex = this.findNearestVertexUniversal(mx, my);
       } else {
-        this.hoveredVertex = null;
+        this.hoveredSnapVertex = null;
       }
-      if (this.tool === 'poligon') {
-        // Подсветка вершин линий и других полигонов
-        let found = null;
-        // Линии
-        const linesLayer = this.layers.find(l => l.name === 'Линии');
-        if (linesLayer && linesLayer.lines) {
-          const rect = this.canvas.getBoundingClientRect();
-          const mx = e.clientX - rect.left;
-          const my = e.clientY - rect.top;
-          let minDist = 15;
-          linesLayer.lines.forEach((line) => {
-            line.points.forEach((pt) => {
-              const c = this.sightToCanvas(pt);
-              const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
-              if (dist < minDist) {
-                minDist = dist;
-                found = { x: pt.x, y: pt.y };
-              }
-            });
-          });
+      // Призрак линии
+      if (this.tool === 'lines' && this.isDrawingLine) {
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const { x, y } = this.canvasToSight(canvasPt);
+        if (this.drawingLine) {
+          this.drawingLine.ghost = { x, y };
         }
-        // Многоугольники
-        const poligonLayer = this.layers.find(l => l.name === 'Многоугольники');
-        if (poligonLayer && poligonLayer.poligons) {
-          const rect = this.canvas.getBoundingClientRect();
-          const mx = e.clientX - rect.left;
-          const my = e.clientY - rect.top;
-          let minDist = 15;
-          poligonLayer.poligons.forEach((poly) => {
-            poly.points.forEach((pt) => {
-              const c = this.sightToCanvas(pt);
-              const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
-              if (dist < minDist) {
-                minDist = dist;
-                found = { x: pt.x, y: pt.y };
-              }
-            });
-          });
-        }
-        this.hoveredPolyVertex = found;
-        // Призрак стороны
-        if (!this.isDrawingPolygon || !this.drawingPolygon) return;
+      }
+      // Призрак многоугольника
+      if (this.tool === 'polygon' && this.isDrawingPolygon && this.drawingPolygon) {
         const rect = this.canvas.getBoundingClientRect();
         const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         const { x, y } = this.canvasToSight(canvasPt);
         this.drawingPolygon.ghost = { x, y };
-        return;
-      }
-      // Призрак линии
-      if (this.tool !== 'lines' || !this.isDrawingLine) return;
-      const rect = this.canvas.getBoundingClientRect();
-      const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      const { x, y } = this.canvasToSight(canvasPt);
-      if (this.drawingLine) {
-        this.drawingLine.ghost = { x, y };
       }
     },
     onPointerDown(e) {
@@ -1203,6 +1319,64 @@ export default {
         if (gotNegative && gotPositive) return false;
       }
       return true;
+    },
+    onDeletePolygon(e) {
+      if (e.key === 'Delete' && this.selectedPolygonIdx !== null) {
+        const polygonsLayer = this.ensurePolygonsLayer();
+        if (polygonsLayer.polygons[this.selectedPolygonIdx]) {
+          polygonsLayer.polygons.splice(this.selectedPolygonIdx, 1);
+          this.selectedPolygonIdx = null;
+        }
+      }
+    },
+    onDeleteOrInsertSelected(e) {
+      if ((e.key === 'Delete' || e.key === 'Insert') && this.tool === 'select' && this.selectedElement) {
+        if (this.selectedElement.type === 'line') {
+          const linesLayer = this.layers.find(l => l.name === 'Линии');
+          if (linesLayer && linesLayer.lines && linesLayer.lines[this.selectedElement.idx]) {
+            linesLayer.lines.splice(this.selectedElement.idx, 1);
+            this.selectedElement = null;
+          }
+        } else if (this.selectedElement.type === 'polygon') {
+          const polygonsLayer = this.ensurePolygonsLayer();
+          if (polygonsLayer.polygons && polygonsLayer.polygons[this.selectedElement.idx]) {
+            polygonsLayer.polygons.splice(this.selectedElement.idx, 1);
+            this.selectedElement = null;
+          }
+        }
+      }
+    },
+    // Универсальный поиск ближайшей вершины среди всех линий и многоугольников
+    findNearestVertexUniversal(mx, my) {
+      let minDist = 15;
+      let found = null;
+      // Линии
+      const linesLayer = this.layers.find(l => l.name === 'Линии');
+      if (linesLayer && linesLayer.lines) {
+        linesLayer.lines.forEach((line) => {
+          line.points.forEach((pt) => {
+            const c = this.sightToCanvas(pt);
+            const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
+            if (dist < minDist) {
+              minDist = dist;
+              found = { x: pt.x, y: pt.y };
+            }
+          });
+        });
+      }
+      // Многоугольники
+      const polygonsLayer = this.ensurePolygonsLayer();
+      polygonsLayer.polygons.forEach((poly) => {
+        poly.points.forEach((pt) => {
+          const c = this.sightToCanvas(pt);
+          const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
+          if (dist < minDist) {
+            minDist = dist;
+            found = { x: pt.x, y: pt.y };
+          }
+        });
+      });
+      return found;
     },
   },
   watch: {
