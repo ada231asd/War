@@ -72,21 +72,43 @@
       </button>
       <div v-if="showHelp" class="modal-overlay">
         <div class="modal-window" style="max-width:520px;">
-          <h3>Горячие клавиши и управление</h3>
-          <ul style="text-align:left;font-size:1.1em;line-height:1.7;">
-            <li><b>Alt + колесо мыши</b> — Масштабирование холста</li>
-            <li><b>ПКМ (правая кнопка мыши)</b> — Перемещение холста</li>
-            <li><b>Ctrl + клик</b> — Привязка к ближайшей вершине</li>
-            <li><b>Ctrl + перемещение</b> — Привязка курсора к ближайшей вершине на всех инструментах</li>
-            <li><b>Shift + клик (инструмент Многоугольник)</b> — Выделить многоугольник</li>
-            <li><b>Delete</b> — Удалить выбранный объект/многоугольник</li>
-            <li><b>Insert</b> — Удалить выбранный объект (инструмент Выборка)</li>
-            <li><b>Alt + T / Alt + М</b> — Свободная трансформация слоя</li>
-            <li><b>ЛКМ</b> — Добавить точку (линия/многоугольник)</li>
-            <li><b>ЛКМ по первой точке (многоугольник)</b> — Замкнуть многоугольник</li>
-            <li><b>ЛКМ по объекту (инструмент Выборка)</b> — Выделить объект</li>
-            <li><b>Enter</b> — Подтвердить ввод имени слоя</li>
-          </ul>
+          <h3>Справка по редактору прицелов</h3>
+          
+          <div style="text-align:left;font-size:1.1em;line-height:1.6;margin:1em 0;">
+            <h4 style="color:#ffd700;margin-bottom:0.5em;">🎯 Основные инструменты:</h4>
+            <ul style="margin:0.5em 0;padding-left:1.5em;">
+              <li><b>Выборка</b> — выделение и редактирование объектов</li>
+              <li><b>Линия</b> — создание линий прицела</li>
+              <li><b>Многоугольник</b> — создание заливок</li>
+            </ul>
+            
+            <h4 style="color:#ffd700;margin:1em 0 0.5em 0;">⌨️ Горячие клавиши:</h4>
+            <ul style="margin:0.5em 0;padding-left:1.5em;">
+              <li><b>Ctrl+Z</b> / <b>Ctrl+Я</b> — отменить действие</li>
+              <li><b>Ctrl+Y</b> / <b>Ctrl+Н</b> — повторить действие</li>
+              <li><b>Delete</b> — удалить выбранный объект</li>
+              <li><b>Alt+колесо мыши</b> — масштабирование</li>
+              <li><b>ПКМ</b> — перемещение холста</li>
+            </ul>
+            
+            <h4 style="color:#ffd700;margin:1em 0 0.5em 0;">🔧 Полезные советы:</h4>
+            <ul style="margin:0.5em 0;padding-left:1.5em;">
+              <li>Зажмите <b>Ctrl</b> для привязки к вершинам</li>
+              <li>Используйте <b>Shift+клик</b> для выделения многоугольников</li>
+              <li>Двойной клик по первой точке замыкает многоугольник</li>
+              <li>Автосохранение происходит каждые 30 секунд</li>
+              <li>Экспортируйте в .blk для использования в игре</li>
+            </ul>
+            
+            <h4 style="color:#ffd700;margin:1em 0 0.5em 0;">💾 Работа с файлами:</h4>
+            <ul style="margin:0.5em 0;padding-left:1.5em;">
+              <li><b>Сохранить</b> — сохранить проект в .txt</li>
+              <li><b>Загрузить</b> — открыть сохраненный проект</li>
+              <li><b>Экспорт</b> — создать .blk файл для игры</li>
+              <li><b>Предпросмотр</b> — увидеть прицел в действии</li>
+            </ul>
+          </div>
+          
           <div style="text-align:right;margin-top:1.5em;">
             <button @click="showHelp = false" style="background:#23272f;color:#ffd700;border:1px solid #ffd700;border-radius:6px;padding:0.5em 1.2em;font-size:1.1em;cursor:pointer;">Закрыть</button>
           </div>
@@ -174,6 +196,11 @@ export default {
       // --- предпросмотр прицела ---
       showPreview: false,
       previewBlkData: '',
+      // --- история изменений для Ctrl+Z/Ctrl+Y ---
+      history: [], // массив состояний для отмены/возврата
+      historyIndex: -1, // текущий индекс в истории
+      maxHistorySize: 50, // максимальное количество состояний в истории
+      isUndoRedoAction: false, // флаг для предотвращения записи в историю при отмене/возврате
     };
   },
   mounted() {
@@ -200,6 +227,9 @@ export default {
     if (this.layers.length === 0) {
       this.createDefaultSight();
     }
+    
+    // Инициализируем историю изменений
+    this.saveToHistory();
     
     // Запускаем автосохранение
     this.startAutosave();
@@ -660,6 +690,18 @@ export default {
       if (e.altKey && (e.key === 'т' || e.key === 'T' || e.key === 'm' || e.key === 'M')) {
         this.freeTransform = true;
       }
+      
+      // Обработка Ctrl+Z (отмена) - поддержка русской и английской раскладки
+      if (e.ctrlKey && (e.key === 'z' || e.key === 'я') && !e.shiftKey) {
+        e.preventDefault();
+        this.undo();
+      }
+      
+      // Обработка Ctrl+Y или Ctrl+Shift+Z (возврат) - поддержка русской и английской раскладки
+      if ((e.ctrlKey && (e.key === 'y' || e.key === 'н')) || (e.ctrlKey && e.shiftKey && (e.key === 'z' || e.key === 'я'))) {
+        e.preventDefault();
+        this.redo();
+      }
     },
     onKeyUp(e) {
       if (e.key === 'Control') {
@@ -862,8 +904,8 @@ export default {
             poligonLayer.polygons.push({ ...this.drawingPolygon });
             this.drawingPolygon = null;
             this.isDrawingPolygon = false;
-            // Автосохранение при добавлении многоугольника
-            this.saveToAutosave();
+            // Сохраняем состояние при добавлении многоугольника
+            this.saveState();
             return;
           }
 
@@ -889,8 +931,8 @@ export default {
             linesLayer.lines.push({ ...this.drawingLine });
             this.drawingLine = null;
             this.isDrawingLine = false;
-            // Автосохранение при добавлении линии
-            this.saveToAutosave();
+            // Сохраняем состояние при добавлении линии
+            this.saveState();
           } else {
             this.drawingLine = { points: [{ x: snapVertex.x, y: snapVertex.y }] };
             this.isDrawingLine = true;
@@ -904,8 +946,8 @@ export default {
             linesLayer.lines.push({ ...this.drawingLine });
             this.drawingLine = null;
             this.isDrawingLine = false;
-            // Автосохранение при добавлении линии
-            this.saveToAutosave();
+            // Сохраняем состояние при добавлении линии
+            this.saveState();
           }
         }
         return;
@@ -1011,8 +1053,8 @@ export default {
             layer.shiftY = y;
           }
           
-          // Автосохранение при трансформации слоя
-          this.saveToAutosave();
+          // Сохраняем состояние при трансформации слоя
+          this.saveState();
         }
         return;
       }
@@ -1196,8 +1238,8 @@ export default {
         settings: `id=${layer.id} width=${layer.width} height=${layer.height} opacity=${layer.opacity}`,
         svg: `<image x="0" y="0" width="${layer.width}" height="${layer.height}" href="data:image/png;base64,..." opacity="${layer.opacity}"/>`
       });
-      // Автосохранение при загрузке изображения
-      this.saveToAutosave();
+      // Сохраняем состояние при загрузке изображения
+      this.saveState();
     },
     onSaveFile(fileName) {
       // Сохраняем состояние редактора в .txt (JSON)
@@ -1239,6 +1281,8 @@ export default {
               opacity: 1
             });
             URL.revokeObjectURL(url);
+            // Сохраняем состояние при загрузке SVG
+            this.saveState();
           };
           img.src = url;
         } else {
@@ -1248,6 +1292,8 @@ export default {
           this.screenPos = data.screenPos || { x: 0, y: 0.1 };
           this.screenZoom = data.screenZoom || 0.2;
           this.gridSize = data.gridSize || 0.1;
+          // Сохраняем состояние при загрузке TXT
+          this.saveState();
         }
       } catch (e) {
         alert('Ошибка загрузки файла: ' + e.message);
@@ -1373,8 +1419,9 @@ export default {
       a.click();
       URL.revokeObjectURL(a.href);
       
-      // Очищаем автосохраненные данные при успешном экспорте
+      // Очищаем автосохраненные данные и историю при успешном экспорте
       this.clearAutosaveData();
+      this.clearHistory();
       
       // Показываем уведомление об успешном экспорте
       alert(`Файл успешно экспортирован!\n${validationResult.message}`);
@@ -1467,8 +1514,8 @@ export default {
         settings: `id=${layer.id} name=${layer.name} width=${layer.width} height=${layer.height} opacity=${layer.opacity}`,
         svg: `<rect x="0" y="0" width="${layer.width}" height="${layer.height}" fill="none" stroke="black" opacity="${layer.opacity}"/>`
       });
-      // Автосохранение при добавлении слоя
-      this.saveToAutosave();
+      // Сохраняем состояние при добавлении слоя
+      this.saveState();
     },
     // --- Трансформирование с маркерами ---
     getSelectedLayer() {
@@ -1510,8 +1557,8 @@ export default {
       if (idx !== -1 && !this.layers[idx].locked) {
         this.layers.splice(idx, 1);
         if (this.selectedLayerId === id) this.selectedLayerId = null;
-        // Автосохранение при удалении слоя
-        this.saveToAutosave();
+        // Сохраняем состояние при удалении слоя
+        this.saveState();
       }
     },
     moveLayer({id, dir}) {
@@ -1522,15 +1569,15 @@ export default {
       if (this.layers[newIdx].locked) return; // нельзя поменять местами с заблокированным
       const [layer] = this.layers.splice(idx, 1);
       this.layers.splice(newIdx, 0, layer);
-      // Автосохранение при перемещении слоя
-      this.saveToAutosave();
+      // Сохраняем состояние при перемещении слоя
+      this.saveState();
     },
     editLayerName({id, name}) {
       const layer = this.layers.find(l => l.id === id);
       if (layer && !layer.locked) {
         layer.name = name;
-        // Автосохранение при изменении имени слоя
-        this.saveToAutosave();
+        // Сохраняем состояние при изменении имени слоя
+        this.saveState();
       }
     },
     addLineToConsole(line) {
@@ -1607,8 +1654,8 @@ export default {
         if (polygonsLayer.polygons[this.selectedPolygonIdx]) {
           polygonsLayer.polygons.splice(this.selectedPolygonIdx, 1);
           this.selectedPolygonIdx = null;
-          // Автосохранение при удалении многоугольника
-          this.saveToAutosave();
+          // Сохраняем состояние при удалении многоугольника
+          this.saveState();
         }
       }
     },
@@ -1619,16 +1666,16 @@ export default {
           if (linesLayer && linesLayer.lines && linesLayer.lines[this.selectedElement.idx]) {
             linesLayer.lines.splice(this.selectedElement.idx, 1);
             this.selectedElement = null;
-            // Автосохранение при удалении линии
-            this.saveToAutosave();
+            // Сохраняем состояние при удалении линии
+            this.saveState();
           }
         } else if (this.selectedElement.type === 'polygon') {
           const polygonsLayer = this.ensurePolygonsLayer();
           if (polygonsLayer.polygons && polygonsLayer.polygons[this.selectedElement.idx]) {
             polygonsLayer.polygons.splice(this.selectedElement.idx, 1);
             this.selectedElement = null;
-            // Автосохранение при удалении многоугольника
-            this.saveToAutosave();
+            // Сохраняем состояние при удалении многоугольника
+            this.saveState();
           }
         }
       }
@@ -1672,8 +1719,8 @@ export default {
       const layer = this.layers.find(l => l.id === id);
       if (layer) {
         layer.opacity = opacity;
-        // Автосохранение при изменении прозрачности слоя
-        this.saveToAutosave();
+        // Сохраняем состояние при изменении прозрачности слоя
+        this.saveState();
       }
     },
     
@@ -1964,7 +2011,116 @@ export default {
       // Добавляем слои
       this.layers.push(polygonLayer, linesLayer);
       
-      // Сохраняем в автосохранение
+      // Сохраняем состояние
+      this.saveState();
+    },
+
+    // --- Методы для работы с историей изменений ---
+    
+    // Сохранение текущего состояния в историю
+    saveToHistory() {
+      if (this.isUndoRedoAction) return; // Не сохраняем при отмене/возврате
+      
+      // Создаем глубокую копию текущего состояния
+      const currentState = this.createStateSnapshot();
+      
+      // Удаляем все состояния после текущего индекса (если мы находимся не в конце истории)
+      if (this.historyIndex < this.history.length - 1) {
+        this.history = this.history.slice(0, this.historyIndex + 1);
+      }
+      
+      // Добавляем новое состояние
+      this.history.push(currentState);
+      this.historyIndex++;
+      
+      // Ограничиваем размер истории
+      if (this.history.length > this.maxHistorySize) {
+        this.history.shift();
+        this.historyIndex--;
+      }
+      
+      console.log(`История обновлена: ${this.history.length} состояний, индекс: ${this.historyIndex}`);
+    },
+    
+    // Создание снимка текущего состояния
+    createStateSnapshot() {
+      return {
+        layers: JSON.parse(JSON.stringify(this.layers)), // Глубокая копия слоев
+        screenPos: { ...this.screenPos },
+        screenZoom: this.screenZoom,
+        gridSize: this.gridSize,
+        selectedLayerId: this.selectedLayerId,
+        selectedObjectId: this.selectedObjectId,
+        selectedPolygonIdx: this.selectedPolygonIdx,
+        selectedElement: this.selectedElement ? { ...this.selectedElement } : null,
+        timestamp: Date.now()
+      };
+    },
+    
+    // Восстановление состояния из истории
+    restoreFromHistory(state) {
+      this.isUndoRedoAction = true; // Предотвращаем запись в историю
+      
+      // Восстанавливаем состояние
+      this.layers = JSON.parse(JSON.stringify(state.layers));
+      this.screenPos = { ...state.screenPos };
+      this.screenZoom = state.screenZoom;
+      this.gridSize = state.gridSize;
+      this.selectedLayerId = state.selectedLayerId;
+      this.selectedObjectId = state.selectedObjectId;
+      this.selectedPolygonIdx = state.selectedPolygonIdx;
+      this.selectedElement = state.selectedElement ? { ...state.selectedElement } : null;
+      
+      // Сбрасываем временные состояния
+      this.drawingLine = null;
+      this.isDrawingLine = false;
+      this.drawingPolygon = null;
+      this.isDrawingPolygon = false;
+      this.isTransforming = false;
+      this.transformMode = null;
+      
+      // Автосохранение после восстановления
+      this.saveToAutosave();
+      
+      setTimeout(() => {
+        this.isUndoRedoAction = false;
+      }, 100);
+    },
+    
+    // Отмена последнего действия (Ctrl+Z)
+    undo() {
+      if (this.historyIndex > 0) {
+        this.historyIndex--;
+        const previousState = this.history[this.historyIndex];
+        this.restoreFromHistory(previousState);
+        console.log(`Отменено действие. Индекс истории: ${this.historyIndex}`);
+      } else {
+        console.log('Нет действий для отмены');
+      }
+    },
+    
+    // Возврат отмененного действия (Ctrl+Y)
+    redo() {
+      if (this.historyIndex < this.history.length - 1) {
+        this.historyIndex++;
+        const nextState = this.history[this.historyIndex];
+        this.restoreFromHistory(nextState);
+        console.log(`Возвращено действие. Индекс истории: ${this.historyIndex}`);
+      } else {
+        console.log('Нет действий для возврата');
+      }
+    },
+    
+    // Очистка истории
+    clearHistory() {
+      this.history = [];
+      this.historyIndex = -1;
+      console.log('История очищена');
+    },
+    
+    // Вспомогательный метод для сохранения состояния
+    saveState() {
+      this.saveToHistory();
       this.saveToAutosave();
     },
   },
