@@ -28,6 +28,8 @@
       <canvas id="mainCanvas" ref="mainCanvas" :width="canvasWidth" :height="1080"></canvas>
       
       <SightEditorMenu
+        ref="sightEditorMenu"
+        :autoSaveEnabled="autoSaveEnabled"
         @image-loaded="onImageLoaded"
         @save="onSaveFile"
         @file-loaded="onFileLoaded"
@@ -38,6 +40,7 @@
       />
     
       <LayersPanel
+        v-if="!isCanvasEmpty"
         :layers="layers"
         :selectedLayerId="selectedLayerId"
         :selectedObjectId="selectedObjectId"
@@ -55,6 +58,13 @@
       <div id="hints" style="text-align: center; margin: auto; font-size: 0.8em; user-select: none;">
         <span id="hintsText"></span>
       </div>
+      
+      <!-- Индикатор автосохранения -->
+      <div v-if="autoSaveEnabled" class="autosave-indicator" :class="{ saving: isAutoSaving }">
+        <span class="autosave-text">{{ isAutoSaving ? 'Сохранение...' : 'Автосохранение включено' }}</span>
+        <span class="autosave-dot"></span>
+      </div>
+      
       <a id="saver"></a>
       <button class="help-btn" @click="showHelp = true" title="Горячие клавиши" style="position:fixed;top:1em;left:1em;z-index:1001;background:#23272f;color:#ffd700;border:none;border-radius:50%;width:40px;height:40px;font-size:1.7em;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px #0006;cursor:pointer;">
         ?
@@ -66,6 +76,7 @@
             <li><b>Alt + колесо мыши</b> — Масштабирование холста</li>
             <li><b>ПКМ (правая кнопка мыши)</b> — Перемещение холста</li>
             <li><b>Ctrl + клик</b> — Привязка к ближайшей вершине</li>
+            <li><b>Ctrl + перемещение</b> — Привязка курсора к ближайшей вершине на всех инструментах</li>
             <li><b>Shift + клик (инструмент Многоугольник)</b> — Выделить многоугольник</li>
             <li><b>Delete</b> — Удалить выбранный объект/многоугольник</li>
             <li><b>Insert</b> — Удалить выбранный объект (инструмент Выборка)</li>
@@ -88,7 +99,7 @@
 import editorConfig from '../sightEditor/config';
 import SightEditorMenu from '../components/sightEditor/SightEditorMenu.vue';
 import LayersPanel from '../components/sightEditor/LayersPanel.vue';
-import { drawPolygons, drawGhostPolygon, findNearestVertex as findNearestPolyVertex } from '../components/sightEditor/tools/polygonTool.js';
+import { drawGhostPolygon, findNearestVertex as findNearestPolyVertex } from '../components/sightEditor/tools/polygonTool.js';
 import earcut from 'earcut';
 
 export default {
@@ -143,6 +154,14 @@ export default {
       hoveredSnapVertex: null, // универсальная подсветка вершины
       selectedElement: null, // выбранный элемент для инструмента выборка
       showHelp: false,
+      // --- автосохранение ---
+      autoSaveEnabled: true, // Включено по умолчанию
+      autoSaveInterval: null,
+      autoSaveKey: 'sightEditor_autosave',
+      autoSaveSettingsKey: 'sightEditor_settings',
+      isAutoSaving: false,
+      // --- консоль ---
+      consoleLog: [],
     };
   },
   mounted() {
@@ -158,6 +177,11 @@ export default {
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('keydown', this.onDeletePolygon); // для Delete
     window.addEventListener('keydown', this.onDeleteOrInsertSelected);
+    
+    // Загружаем настройки автосохранения
+    this.loadAutosaveSettings();
+    // Загружаем автосохраненные данные при старте
+    this.loadAutosavedData();
   },
   beforeUnmount() {
     window.removeEventListener('resize', this.updateCanvasSize);
@@ -166,6 +190,9 @@ export default {
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('keydown', this.onDeletePolygon);
     window.removeEventListener('keydown', this.onDeleteOrInsertSelected);
+    
+    // Останавливаем автосохранение
+    this.stopAutosave();
   },
   methods: {
     el(id) {
@@ -179,10 +206,18 @@ export default {
           disclaimer.parentNode.removeChild(disclaimer);
         }
       }
+      
+      // Инициализируем слои при загрузке
+      this.ensureLinesLayer();
+      this.ensurePolygonsLayer();
     },
     attachCanvasEvents() {
       this.canvas.onpointerover = () => { this.canvasHover = true; };
-      this.canvas.onpointerleave = () => { this.canvasHover = false; this.clearDrawing(); };
+      this.canvas.onpointerleave = () => { 
+        this.canvasHover = false; 
+        this.clearDrawing(); 
+        this.hoveredSnapVertex = null; // Сбрасываем подсветку вершины при выходе с холста
+      };
       this.canvas.oncontextmenu = (e) => { e.preventDefault(); };
       this.canvas.onpointerdown = this.onPointerDown;
       this.canvas.onpointermove = this.onPointerMove;
@@ -198,10 +233,8 @@ export default {
       this.drawStuff();
       this.drawArrows();
       this.drawGhost();
-      // --- polygons ---
+      // --- Подсветка выделенного многоугольника ---
       const polygonsLayer = this.ensurePolygonsLayer();
-      drawPolygons(this.ctx, polygonsLayer.polygons, this.screenPos, this.screenZoom, this.canvas.width, this.canvas.height);
-      // Подсветка выделенного многоугольника
       if (this.selectedPolygonIdx !== null && polygonsLayer.polygons[this.selectedPolygonIdx]) {
         const poly = polygonsLayer.polygons[this.selectedPolygonIdx];
         this.ctx.save();
@@ -227,6 +260,19 @@ export default {
         this.ctx.fillStyle = 'rgba(255,215,0,0.5)';
         this.ctx.fill();
         this.ctx.restore();
+        
+        // Линия от курсора к ближайшей вершине
+        if (this.canvasHover) {
+          this.ctx.save();
+          this.ctx.strokeStyle = 'rgba(255,215,0,0.7)';
+          this.ctx.lineWidth = 2;
+          this.ctx.setLineDash([5, 5]);
+          this.ctx.beginPath();
+          this.ctx.moveTo(this.mousePos.x, this.mousePos.y);
+          this.ctx.lineTo(c.x, c.y);
+          this.ctx.stroke();
+          this.ctx.restore();
+        }
       }
       if (this.tool === 'polygon' && this.isDrawingPolygon && this.drawingPolygon && this.drawingPolygon.points.length > 0) {
         drawGhostPolygon(this.ctx, this.drawingPolygon.points, this.drawingPolygon.ghost, this.screenPos, this.screenZoom, this.canvas.width, this.canvas.height);
@@ -384,46 +430,50 @@ export default {
       return { x: newX, y: newY };
     },
     drawStuff() {
-      // Всегда рисуем все линии
-      const linesLayer = this.layers.find(l => l.name === 'Линии');
-      if (linesLayer && linesLayer.lines) {
+      // Рисуем все слои с учетом их прозрачности
+      for (const layer of this.layers) {
+        if (!layer.opacity || layer.opacity <= 0) continue; // Пропускаем полностью прозрачные слои
+        
         this.ctx.save();
-        this.ctx.strokeStyle = 'black';
-        this.ctx.lineWidth = 2;
-        for (const line of linesLayer.lines) {
-          if (line.points.length < 2) continue;
-          this.ctx.beginPath();
-          const start = this.sightToCanvas(line.points[0]);
-          this.ctx.moveTo(start.x, start.y);
-          for (let i = 1; i < line.points.length; i++) {
-            const pt = this.sightToCanvas(line.points[i]);
-            this.ctx.lineTo(pt.x, pt.y);
+        this.ctx.globalAlpha = layer.opacity;
+        
+        // Рисуем линии
+        if (layer.lines && layer.lines.length > 0) {
+          this.ctx.strokeStyle = 'black';
+          this.ctx.lineWidth = 2;
+          for (const line of layer.lines) {
+            if (line.points.length < 2) continue;
+            this.ctx.beginPath();
+            const start = this.sightToCanvas(line.points[0]);
+            this.ctx.moveTo(start.x, start.y);
+            for (let i = 1; i < line.points.length; i++) {
+              const pt = this.sightToCanvas(line.points[i]);
+              this.ctx.lineTo(pt.x, pt.y);
+            }
+            this.ctx.stroke();
           }
-          this.ctx.stroke();
         }
+        
+        // Рисуем многоугольники
+        if (layer.polygons && layer.polygons.length > 0) {
+          this.ctx.fillStyle = 'black';
+          for (const poly of layer.polygons) {
+            if (poly.points.length < 3) continue;
+            this.ctx.beginPath();
+            const start = this.sightToCanvas(poly.points[0]);
+            this.ctx.moveTo(start.x, start.y);
+            for (let i = 1; i < poly.points.length; i++) {
+              const pt = this.sightToCanvas(poly.points[i]);
+              this.ctx.lineTo(pt.x, pt.y);
+            }
+            this.ctx.closePath();
+            this.ctx.fill();
+          }
+        }
+        
         this.ctx.restore();
       }
-      // Всегда рисуем все многоугольники
-      const poligonLayer = this.layers.find(l => l.name === 'Многоугольники');
-      if (poligonLayer && poligonLayer.poligons) {
-        this.ctx.save();
-        this.ctx.fillStyle = 'black';
-        this.ctx.globalAlpha = 0.7;
-        for (const poly of poligonLayer.poligons) {
-          if (poly.points.length < 3) continue;
-          this.ctx.beginPath();
-          const start = this.sightToCanvas(poly.points[0]);
-          this.ctx.moveTo(start.x, start.y);
-          for (let i = 1; i < poly.points.length; i++) {
-            const pt = this.sightToCanvas(poly.points[i]);
-            this.ctx.lineTo(pt.x, pt.y);
-          }
-          this.ctx.closePath();
-          this.ctx.fill();
-        }
-        this.ctx.globalAlpha = 1;
-        this.ctx.restore();
-      }
+      
       // Призраки и подсветка — только для активного инструмента
       if (this.tool === 'lines') {
         if (this.isDrawingLine && this.drawingLine && this.drawingLine.points.length > 0 && this.drawingLine.ghost) {
@@ -453,7 +503,7 @@ export default {
           this.ctx.restore();
         }
       }
-      if (this.tool === 'poligon') {
+      if (this.tool === 'polygon') {
         if (this.isDrawingPolygon && this.drawingPolygon && this.drawingPolygon.points.length > 0) {
           const pts = this.drawingPolygon.points;
           // Рисуем все уже добавленные стороны
@@ -637,43 +687,89 @@ export default {
         const rect = this.canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
-        // Линии: ищем ближайший сегмент
-        const linesLayer = this.layers.find(l => l.name === 'Линии');
-        if (linesLayer && linesLayer.lines) {
-          linesLayer.lines.forEach((line, idx) => {
-            for (let i = 1; i < line.points.length; i++) {
-              const c1 = this.sightToCanvas(line.points[i - 1]);
-              const c2 = this.sightToCanvas(line.points[i]);
-              const dist = this.pointToSegmentDist(mx, my, c1.x, c1.y, c2.x, c2.y);
-              if (dist < minDist) {
-                minDist = dist;
-                foundType = 'line';
-                foundIdx = idx;
-              }
+        
+        // Привязка к ближайшей вершине при зажатом Ctrl
+        if (this.isCtrlDown && this.hoveredSnapVertex) {
+          // Если зажат Ctrl и есть ближайшая вершина, выбираем объект, содержащий эту вершину
+          const snapX = this.hoveredSnapVertex.x;
+          const snapY = this.hoveredSnapVertex.y;
+          
+          // Ищем линию с этой вершиной
+          const linesLayer = this.layers.find(l => l.name === 'Линии');
+          if (linesLayer && linesLayer.lines) {
+            linesLayer.lines.forEach((line, idx) => {
+              line.points.forEach((pt) => {
+                if (Math.abs(pt.x - snapX) < 0.001 && Math.abs(pt.y - snapY) < 0.001) {
+                  foundType = 'line';
+                  foundIdx = idx;
+                }
+              });
+            });
+          }
+          
+          // Ищем многоугольник с этой вершиной
+          if (!foundType) {
+            const polygonsLayer = this.ensurePolygonsLayer();
+            polygonsLayer.polygons.forEach((poly, idx) => {
+              poly.points.forEach((pt) => {
+                if (Math.abs(pt.x - snapX) < 0.001 && Math.abs(pt.y - snapY) < 0.001) {
+                  foundType = 'polygon';
+                  foundIdx = idx;
+                }
+              });
+            });
+          }
+        } else {
+          // Обычный поиск ближайшего объекта с привязкой к вершинам
+          let adjustedMx = mx;
+          let adjustedMy = my;
+          
+          // Если есть ближайшая вершина, используем её координаты для поиска
+          if (this.hoveredSnapVertex) {
+            const snapCanvas = this.sightToCanvas(this.hoveredSnapVertex);
+            adjustedMx = snapCanvas.x;
+            adjustedMy = snapCanvas.y;
+          }
+          // Обычный поиск ближайшего объекта
+                      // Линии: ищем ближайший сегмент
+            const linesLayer = this.layers.find(l => l.name === 'Линии');
+            if (linesLayer && linesLayer.lines) {
+              linesLayer.lines.forEach((line, idx) => {
+                for (let i = 1; i < line.points.length; i++) {
+                  const c1 = this.sightToCanvas(line.points[i - 1]);
+                  const c2 = this.sightToCanvas(line.points[i]);
+                  const dist = this.pointToSegmentDist(adjustedMx, adjustedMy, c1.x, c1.y, c2.x, c2.y);
+                  if (dist < minDist) {
+                    minDist = dist;
+                    foundType = 'line';
+                    foundIdx = idx;
+                  }
+                }
+              });
             }
-          });
-        }
-        // Многоугольники: если курсор внутри — выбираем, иначе ищем ближайшее ребро
-        const polygonsLayer = this.ensurePolygonsLayer();
-        polygonsLayer.polygons.forEach((poly, idx) => {
-          const screenPoints = poly.points.map(pt => this.sightToCanvas(pt));
-          if (this.pointInPolygon(mx, my, screenPoints)) {
-            minDist = 0; // приоритет
-            foundType = 'polygon';
-            foundIdx = idx;
-          } else {
-            for (let i = 1; i <= screenPoints.length; i++) {
-              const c1 = screenPoints[i - 1];
-              const c2 = screenPoints[i % screenPoints.length];
-              const dist = this.pointToSegmentDist(mx, my, c1.x, c1.y, c2.x, c2.y);
-              if (dist < minDist) {
-                minDist = dist;
+            // Многоугольники: если курсор внутри — выбираем, иначе ищем ближайшее ребро
+            const polygonsLayer = this.ensurePolygonsLayer();
+            polygonsLayer.polygons.forEach((poly, idx) => {
+              const screenPoints = poly.points.map(pt => this.sightToCanvas(pt));
+              if (this.pointInPolygon(adjustedMx, adjustedMy, screenPoints)) {
+                minDist = 0; // приоритет
                 foundType = 'polygon';
                 foundIdx = idx;
+              } else {
+                for (let i = 1; i <= screenPoints.length; i++) {
+                  const c1 = screenPoints[i - 1];
+                  const c2 = screenPoints[i % screenPoints.length];
+                  const dist = this.pointToSegmentDist(adjustedMx, adjustedMy, c1.x, c1.y, c2.x, c2.y);
+                  if (dist < minDist) {
+                    minDist = dist;
+                    foundType = 'polygon';
+                    foundIdx = idx;
+                  }
+                }
               }
-            }
-          }
-        });
+            });
+        }
+        
         if (foundType) {
           this.selectedElement = { type: foundType, idx: foundIdx };
         } else {
@@ -689,12 +785,22 @@ export default {
         const my = e.clientY - rect.top;
         let minDist = 9999;
         let foundIdx = null;
+        
+        // Привязка к ближайшей вершине при зажатом Ctrl
+        let adjustedMx = mx;
+        let adjustedMy = my;
+        if (this.isCtrlDown && this.hoveredSnapVertex) {
+          const snapCanvas = this.sightToCanvas(this.hoveredSnapVertex);
+          adjustedMx = snapCanvas.x;
+          adjustedMy = snapCanvas.y;
+        }
+        
         polygonsLayer.polygons.forEach((poly, idx) => {
           // Проверяем расстояние до центра масс
           const cx = poly.points.reduce((sum, p) => sum + p.x, 0) / poly.points.length;
           const cy = poly.points.reduce((sum, p) => sum + p.y, 0) / poly.points.length;
           const c = this.sightToCanvas({ x: cx, y: cy });
-          const dist = Math.sqrt((mx - c.x) ** 2 + (my - c.y) ** 2);
+          const dist = Math.sqrt((adjustedMx - c.x) ** 2 + (adjustedMy - c.y) ** 2);
           if (dist < minDist && dist < 50) { // 50px радиус
             minDist = dist;
             foundIdx = idx;
@@ -726,6 +832,8 @@ export default {
             poligonLayer.polygons.push({ ...this.drawingPolygon });
             this.drawingPolygon = null;
             this.isDrawingPolygon = false;
+            // Автосохранение при добавлении многоугольника
+            this.saveToAutosave();
             return;
           }
 
@@ -751,6 +859,8 @@ export default {
             linesLayer.lines.push({ ...this.drawingLine });
             this.drawingLine = null;
             this.isDrawingLine = false;
+            // Автосохранение при добавлении линии
+            this.saveToAutosave();
           } else {
             this.drawingLine = { points: [{ x: snapVertex.x, y: snapVertex.y }] };
             this.isDrawingLine = true;
@@ -764,6 +874,8 @@ export default {
             linesLayer.lines.push({ ...this.drawingLine });
             this.drawingLine = null;
             this.isDrawingLine = false;
+            // Автосохранение при добавлении линии
+            this.saveToAutosave();
           }
         }
         return;
@@ -775,6 +887,10 @@ export default {
       this.hoveredPolyVertex = null;
     },
     onPointerMove(e) {
+      // Обновляем позицию мыши
+      const rect = this.canvas.getBoundingClientRect();
+      this.mousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      
       if (this.dragging) {
         const dx = (e.clientX - this.lastDragPos.x) / (this.screenZoom * 2000);
         const dy = (e.clientY - this.lastDragPos.y) / (this.screenZoom * 2000);
@@ -793,8 +909,31 @@ export default {
           const dx = (mx - this.transformStart.x) / (this.screenZoom * 2000);
           const dy = (my - this.transformStart.y) / (this.screenZoom * 2000);
           if (this.transformMode === 'move') {
-            layer.shiftX = this.transformStart.shiftX + dx;
-            layer.shiftY = this.transformStart.shiftY + dy;
+            let newShiftX = this.transformStart.shiftX + dx;
+            let newShiftY = this.transformStart.shiftY + dy;
+            
+            // Привязка к ближайшей вершине при зажатом Ctrl
+            if (this.isCtrlDown && this.hoveredSnapVertex) {
+              // Вычисляем центр слоя
+              const layerCenterX = newShiftX;
+              const layerCenterY = newShiftY;
+              
+              // Находим ближайшую вершину к центру слоя
+              const nearestVertex = this.hoveredSnapVertex;
+              const vertexDist = Math.sqrt(
+                (layerCenterX - nearestVertex.x) ** 2 + 
+                (layerCenterY - nearestVertex.y) ** 2
+              );
+              
+              // Если вершина достаточно близко, привязываем к ней
+              if (vertexDist < 0.1) { // 0.1 в координатах sight
+                newShiftX = nearestVertex.x;
+                newShiftY = nearestVertex.y;
+              }
+            }
+            
+            layer.shiftX = newShiftX;
+            layer.shiftY = newShiftY;
           } else if (this.transformMode && this.transformMode.startsWith('resize')) {
             // Определяем, какой маркер тянем
             let w = this.transformStart.width;
@@ -841,6 +980,9 @@ export default {
             layer.shiftX = x;
             layer.shiftY = y;
           }
+          
+          // Автосохранение при трансформации слоя
+          this.saveToAutosave();
         }
         return;
       }
@@ -859,7 +1001,12 @@ export default {
         const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         const { x, y } = this.canvasToSight(canvasPt);
         if (this.drawingLine) {
-          this.drawingLine.ghost = { x, y };
+          // Привязка к ближайшей вершине при зажатом Ctrl
+          if (this.isCtrlDown && this.hoveredSnapVertex) {
+            this.drawingLine.ghost = { x: this.hoveredSnapVertex.x, y: this.hoveredSnapVertex.y };
+          } else {
+            this.drawingLine.ghost = { x, y };
+          }
         }
       }
       // Призрак многоугольника
@@ -867,7 +1014,12 @@ export default {
         const rect = this.canvas.getBoundingClientRect();
         const canvasPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         const { x, y } = this.canvasToSight(canvasPt);
-        this.drawingPolygon.ghost = { x, y };
+        // Привязка к ближайшей вершине при зажатом Ctrl
+        if (this.isCtrlDown && this.hoveredSnapVertex) {
+          this.drawingPolygon.ghost = { x: this.hoveredSnapVertex.x, y: this.hoveredSnapVertex.y };
+        } else {
+          this.drawingPolygon.ghost = { x, y };
+        }
       }
     },
     onPointerDown(e) {
@@ -889,7 +1041,16 @@ export default {
         const to = this.v2disposSight2v2canvas({ x: layer.width / 2 + layer.shiftX, y: layer.height / 2 + layer.shiftY });
         const handles = this.getTransformHandles(from, to);
         for (const h of handles) {
-          if (mx >= h.x - 8 && mx <= h.x + 8 && my >= h.y - 8 && my <= h.y + 8) {
+          // Проверяем попадание в маркер с учетом привязки к вершинам
+          let checkMx = mx;
+          let checkMy = my;
+          if (this.isCtrlDown && this.hoveredSnapVertex) {
+            const snapCanvas = this.sightToCanvas(this.hoveredSnapVertex);
+            checkMx = snapCanvas.x;
+            checkMy = snapCanvas.y;
+          }
+          
+          if (checkMx >= h.x - 8 && checkMx <= h.x + 8 && checkMy >= h.y - 8 && checkMy <= h.y + 8) {
             this.selectedLayerId = layer.id;
             this.isTransforming = true;
             this.transformMode = h.type;
@@ -900,14 +1061,34 @@ export default {
         }
         if (hit) break;
         // --- Исправление: свободная трансформация только при tool === 'select' ---
-        if (this.tool === 'select' && this.freeTransform && this.selectedLayerId === layer.id && layer.img && mx >= from.x && mx <= to.x && my >= from.y && my <= to.y) {
-          this.isTransforming = true;
-          this.transformMode = 'move';
-          this.transformStart = { x: mx, y: my, ...layer };
-          hit = true;
-          break;
+        if (this.tool === 'select' && this.freeTransform && this.selectedLayerId === layer.id && layer.img) {
+          // Проверяем попадание в слой с учетом привязки к вершинам
+          let checkMx = mx;
+          let checkMy = my;
+          if (this.isCtrlDown && this.hoveredSnapVertex) {
+            const snapCanvas = this.sightToCanvas(this.hoveredSnapVertex);
+            checkMx = snapCanvas.x;
+            checkMy = snapCanvas.y;
+          }
+          
+          if (checkMx >= from.x && checkMx <= to.x && checkMy >= from.y && checkMy <= to.y) {
+            this.isTransforming = true;
+            this.transformMode = 'move';
+            this.transformStart = { x: mx, y: my, ...layer };
+            hit = true;
+            break;
+          }
         }
-        if (mx >= from.x && mx <= to.x && my >= from.y && my <= to.y) {
+        // Проверяем попадание в слой с учетом привязки к вершинам
+        let checkMx = mx;
+        let checkMy = my;
+        if (this.isCtrlDown && this.hoveredSnapVertex) {
+          const snapCanvas = this.sightToCanvas(this.hoveredSnapVertex);
+          checkMx = snapCanvas.x;
+          checkMy = snapCanvas.y;
+        }
+        
+        if (checkMx >= from.x && checkMx <= to.x && checkMy >= from.y && checkMy <= to.y) {
           this.selectedLayerId = layer.id;
           this.isTransforming = true;
           this.transformMode = 'move';
@@ -985,6 +1166,8 @@ export default {
         settings: `id=${layer.id} width=${layer.width} height=${layer.height} opacity=${layer.opacity}`,
         svg: `<image x="0" y="0" width="${layer.width}" height="${layer.height}" href="data:image/png;base64,..." opacity="${layer.opacity}"/>`
       });
+      // Автосохранение при загрузке изображения
+      this.saveToAutosave();
     },
     onSaveFile(fileName) {
       // Сохраняем состояние редактора в .txt (JSON)
@@ -1040,9 +1223,10 @@ export default {
         alert('Ошибка загрузки файла: ' + e.message);
       }
     },
-    onExportFile(fileName) {
-      // Экспортируем в .blk по формату shiroko_nn.blk
+    generateBlkContent() {
+      // Генерируем содержимое .blk файла
       let blk = '';
+      
       // --- Базовые параметры (можно вынести в отдельный конфиг) ---
       blk += 'crosshairHorVertSize:p2=3, 2\n';
       blk += 'rangefinderProgressBarColor1:c=0, 255, 0, 64\n';
@@ -1064,6 +1248,8 @@ export default {
       blk += 'crosshairDistHorSizeAdditional:p2=0.005, 0.003\n';
       blk += 'distanceCorrectionPos:p2=-0.26, -0.05\n';
       blk += 'drawDistanceCorrection:b=yes\n\n';
+      
+      // --- Дистанции прицела ---
       blk += 'crosshair_distances{\n';
       blk += '  distance:p3=200, 0, 0\n';
       blk += '  distance:p3=400, 4, 0\n';
@@ -1096,38 +1282,59 @@ export default {
       blk += '  distance:p3=5800, 0, 0\n';
       blk += '  distance:p3=6000, 60, 0\n';
       blk += '}\n\n';
+      
       blk += 'crosshair_hor_ranges{\n}\n\n';
       blk += 'matchExpClass {\nexp_tank:b = yes\nexp_heavy_tank:b = yes\nexp_tank_destroyer:b = yes\nexp_SPAA:b = yes\n}\n\n';
+      
       // --- Экспорт линий ---
       blk += 'drawLines{\n';
       const linesLayer = this.layers.find(l => l.name === 'Линии');
-      if (linesLayer && linesLayer.lines) {
+      if (linesLayer && linesLayer.lines && linesLayer.lines.length > 0) {
         for (const line of linesLayer.lines) {
-          for (let i = 1; i < line.points.length; i++) {
-            const p1 = line.points[i - 1];
-            const p2 = line.points[i];
-            blk += `  line {line:p4=${p1.x},${p1.y},${p2.x},${p2.y};move:b=false;}\n`;
-          }
-        }
-      }
-      blk += '}\n';
-      // --- Экспорт многоугольников (как quads, если 4 точки, иначе как poly) ---
-      blk += 'drawQuads{\n';
-      const poligonLayer = this.layers.find(l => l.name === 'Многоугольники');
-      if (poligonLayer && poligonLayer.poligons) {
-        for (const poly of poligonLayer.poligons) {
-          if (poly.points.length === 4) {
-            blk += `  quad {tl:p2 = ${poly.points[0].x},${poly.points[0].y};tr:p2 = ${poly.points[1].x},${poly.points[1].y};br:p2 = ${poly.points[2].x},${poly.points[2].y};bl:p2 = ${poly.points[3].x},${poly.points[3].y};}\n`;
-          } else if (poly.points.length > 2) {
-            // Разбиваем на треугольники и экспортируем каждый как quad (дублируя последнюю вершину)
-            const tris = this.triangulatePolygon(poly.points);
-            for (const tri of tris) {
-              blk += `  quad {tl:p2 = ${tri[0].x},${tri[0].y};tr:p2 = ${tri[1].x},${tri[1].y};br:p2 = ${tri[2].x},${tri[2].y};bl:p2 = ${tri[2].x},${tri[2].y};}\n`;
+          if (line.points && line.points.length > 1) {
+            for (let i = 1; i < line.points.length; i++) {
+              const p1 = line.points[i - 1];
+              const p2 = line.points[i];
+              blk += `  line {line:p4=${p1.x.toFixed(6)},${p1.y.toFixed(6)},${p2.x.toFixed(6)},${p2.y.toFixed(6)};move:b=false;}\n`;
             }
           }
         }
       }
       blk += '}\n';
+      
+      // --- Экспорт многоугольников ---
+      blk += 'drawQuads{\n';
+      const poligonLayer = this.layers.find(l => l.name === 'Многоугольники');
+      if (poligonLayer && poligonLayer.polygons && poligonLayer.polygons.length > 0) {
+        for (const poly of poligonLayer.polygons) {
+          if (poly.points && poly.points.length >= 3) {
+            if (poly.points.length === 4) {
+              // Четырехугольник - экспортируем как quad
+              blk += `  quad {tl:p2 = ${poly.points[0].x.toFixed(6)},${poly.points[0].y.toFixed(6)};tr:p2 = ${poly.points[1].x.toFixed(6)},${poly.points[1].y.toFixed(6)};br:p2 = ${poly.points[2].x.toFixed(6)},${poly.points[2].y.toFixed(6)};bl:p2 = ${poly.points[3].x.toFixed(6)},${poly.points[3].y.toFixed(6)};}\n`;
+            } else if (poly.points.length > 2) {
+              // Многоугольник с более чем 4 точками - разбиваем на треугольники
+              const tris = this.triangulatePolygon(poly.points);
+              for (const tri of tris) {
+                blk += `  quad {tl:p2 = ${tri[0].x.toFixed(6)},${tri[0].y.toFixed(6)};tr:p2 = ${tri[1].x.toFixed(6)},${tri[1].y.toFixed(6)};br:p2 = ${tri[2].x.toFixed(6)},${tri[2].y.toFixed(6)};bl:p2 = ${tri[2].x.toFixed(6)},${tri[2].y.toFixed(6)};}\n`;
+              }
+            }
+          }
+        }
+      }
+      blk += '}\n';
+      
+      return blk;
+    },
+    
+    onExportFile(fileName) {
+      // Проверяем готовность к экспорту
+      const validationResult = this.validateExportData();
+      if (!validationResult.isValid) {
+        alert(`Ошибка валидации: ${validationResult.message}`);
+        return;
+      }
+      
+      const blk = this.generateBlkContent();
       // --- Сохраняем файл ---
       const blob = new Blob([blk], { type: 'text/plain' });
       const a = document.createElement('a');
@@ -1135,10 +1342,62 @@ export default {
       a.download = (fileName || 'export') + '.blk';
       a.click();
       URL.revokeObjectURL(a.href);
+      
+      // Очищаем автосохраненные данные при успешном экспорте
+      this.clearAutosaveData();
+      
+      // Показываем уведомление об успешном экспорте
+      alert(`Файл успешно экспортирован!\n${validationResult.message}`);
+    },
+    
+
+    
+    validateExportData() {
+      // Проверяем, есть ли данные для экспорта
+      let hasLines = false;
+      let hasPolygons = false;
+      let lineCount = 0;
+      let polygonCount = 0;
+      
+      // Проверяем слой линий
+      const linesLayer = this.layers.find(l => l.name === 'Линии');
+      if (linesLayer && linesLayer.lines && linesLayer.lines.length > 0) {
+        for (const line of linesLayer.lines) {
+          if (line.points && line.points.length >= 2) {
+            hasLines = true;
+            lineCount += line.points.length - 1; // Количество сегментов линии
+          }
+        }
+      }
+      
+      // Проверяем слой многоугольников
+      const poligonLayer = this.layers.find(l => l.name === 'Многоугольники');
+      if (poligonLayer && poligonLayer.polygons && poligonLayer.polygons.length > 0) {
+        for (const poly of poligonLayer.polygons) {
+          if (poly.points && poly.points.length >= 3) {
+            hasPolygons = true;
+            polygonCount++;
+          }
+        }
+      }
+      
+      if (!hasLines && !hasPolygons) {
+        return {
+          isValid: false,
+          message: 'Нет данных для экспорта. Добавьте линии или многоугольники на холст.'
+        };
+      }
+      
+      return { 
+        isValid: true, 
+        lineCount, 
+        polygonCount,
+        message: `Готово к экспорту: ${lineCount} сегментов линий, ${polygonCount} многоугольников`
+      };
     },
     onAutosave() {
-      // TODO: реализовать автосохранение
-      alert('Автосохранение!');
+      // Этот метод вызывается из SightEditorMenu
+      this.toggleAutosave(!this.autoSaveEnabled);
     },
     // --- Прозрачность картинки ---
     setReferenceOpacity(opacity) {
@@ -1178,6 +1437,8 @@ export default {
         settings: `id=${layer.id} name=${layer.name} width=${layer.width} height=${layer.height} opacity=${layer.opacity}`,
         svg: `<rect x="0" y="0" width="${layer.width}" height="${layer.height}" fill="none" stroke="black" opacity="${layer.opacity}"/>`
       });
+      // Автосохранение при добавлении слоя
+      this.saveToAutosave();
     },
     // --- Трансформирование с маркерами ---
     getSelectedLayer() {
@@ -1219,6 +1480,8 @@ export default {
       if (idx !== -1 && !this.layers[idx].locked) {
         this.layers.splice(idx, 1);
         if (this.selectedLayerId === id) this.selectedLayerId = null;
+        // Автосохранение при удалении слоя
+        this.saveToAutosave();
       }
     },
     moveLayer({id, dir}) {
@@ -1229,10 +1492,16 @@ export default {
       if (this.layers[newIdx].locked) return; // нельзя поменять местами с заблокированным
       const [layer] = this.layers.splice(idx, 1);
       this.layers.splice(newIdx, 0, layer);
+      // Автосохранение при перемещении слоя
+      this.saveToAutosave();
     },
     editLayerName({id, name}) {
       const layer = this.layers.find(l => l.id === id);
-      if (layer && !layer.locked) layer.name = name;
+      if (layer && !layer.locked) {
+        layer.name = name;
+        // Автосохранение при изменении имени слоя
+        this.saveToAutosave();
+      }
     },
     addLineToConsole(line) {
       if (!line || !line.points || line.points.length < 2) return;
@@ -1308,6 +1577,8 @@ export default {
         if (polygonsLayer.polygons[this.selectedPolygonIdx]) {
           polygonsLayer.polygons.splice(this.selectedPolygonIdx, 1);
           this.selectedPolygonIdx = null;
+          // Автосохранение при удалении многоугольника
+          this.saveToAutosave();
         }
       }
     },
@@ -1318,20 +1589,25 @@ export default {
           if (linesLayer && linesLayer.lines && linesLayer.lines[this.selectedElement.idx]) {
             linesLayer.lines.splice(this.selectedElement.idx, 1);
             this.selectedElement = null;
+            // Автосохранение при удалении линии
+            this.saveToAutosave();
           }
         } else if (this.selectedElement.type === 'polygon') {
           const polygonsLayer = this.ensurePolygonsLayer();
           if (polygonsLayer.polygons && polygonsLayer.polygons[this.selectedElement.idx]) {
             polygonsLayer.polygons.splice(this.selectedElement.idx, 1);
             this.selectedElement = null;
+            // Автосохранение при удалении многоугольника
+            this.saveToAutosave();
           }
         }
       }
     },
     // Универсальный поиск ближайшей вершины среди всех линий и многоугольников
     findNearestVertexUniversal(mx, my) {
-      let minDist = 15;
+      let minDist = 20; // Увеличиваем радиус привязки для удобства
       let found = null;
+      
       // Линии
       const linesLayer = this.layers.find(l => l.name === 'Линии');
       if (linesLayer && linesLayer.lines) {
@@ -1346,6 +1622,7 @@ export default {
           });
         });
       }
+      
       // Многоугольники
       const polygonsLayer = this.ensurePolygonsLayer();
       polygonsLayer.polygons.forEach((poly) => {
@@ -1358,11 +1635,208 @@ export default {
           }
         });
       });
+      
       return found;
     },
     setLayerOpacity({id, opacity}) {
       const layer = this.layers.find(l => l.id === id);
-      if (layer) layer.opacity = opacity;
+      if (layer) {
+        layer.opacity = opacity;
+        // Автосохранение при изменении прозрачности слоя
+        this.saveToAutosave();
+      }
+    },
+    
+    // --- Автосохранение ---
+    saveToAutosave() {
+      if (!this.autoSaveEnabled) return;
+      
+      this.isAutoSaving = true;
+      
+      try {
+        // Оптимизированная структура данных для минимального размера
+        const dataToSave = {
+          // Слои - только необходимые данные
+          l: this.layers.map(layer => ({
+            id: layer.id,
+            n: layer.name, // name
+            t: layer.type, // type
+            w: layer.width, // width
+            h: layer.height, // height
+            sx: layer.shiftX, // shiftX
+            sy: layer.shiftY, // shiftY
+            o: layer.opacity, // opacity
+            // Линии - только точки
+            ln: layer.lines ? layer.lines.map(line => ({
+              p: line.points.map(p => [p.x, p.y]) // points как массив [x, y]
+            })) : undefined,
+            // Многоугольники - только точки
+            pg: layer.polygons ? layer.polygons.map(poly => ({
+              p: poly.points.map(p => [p.x, p.y]) // points как массив [x, y]
+            })) : undefined
+          })),
+          // Позиция и масштаб
+          sp: [this.screenPos.x, this.screenPos.y], // screenPos
+          sz: this.screenZoom, // screenZoom
+          gs: this.gridSize, // gridSize
+          ts: Date.now() // timestamp
+        };
+        
+        localStorage.setItem(this.autoSaveKey, JSON.stringify(dataToSave));
+        console.log('Автосохранение выполнено:', new Date().toLocaleTimeString());
+      } catch (error) {
+        console.error('Ошибка автосохранения:', error);
+      } finally {
+        // Скрываем индикатор через 1 секунду
+        setTimeout(() => {
+          this.isAutoSaving = false;
+        }, 1000);
+      }
+    },
+    
+    loadAutosavedData() {
+      try {
+        const savedData = localStorage.getItem(this.autoSaveKey);
+        if (savedData) {
+          const data = JSON.parse(savedData);
+          
+          // Проверяем, что данные не слишком старые (например, не старше 7 дней)
+          const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 дней в миллисекундах
+          if (data.ts && (Date.now() - data.ts) > maxAge) {
+            console.log('Автосохраненные данные устарели, удаляем');
+            localStorage.removeItem(this.autoSaveKey);
+            return;
+          }
+          
+          // Восстанавливаем данные из оптимизированной структуры
+          this.layers = (data.l || []).map(layer => ({
+            id: layer.id,
+            name: layer.n,
+            type: layer.t,
+            width: layer.w,
+            height: layer.h,
+            shiftX: layer.sx,
+            shiftY: layer.sy,
+            opacity: layer.o,
+            img: null, // Изображения не сохраняются
+            // Восстанавливаем линии
+            lines: layer.ln ? layer.ln.map(line => ({
+              points: line.p.map(p => ({ x: p[0], y: p[1] }))
+            })) : undefined,
+            // Восстанавливаем многоугольники
+            polygons: layer.pg ? layer.pg.map(poly => ({
+              points: poly.p.map(p => ({ x: p[0], y: p[1] }))
+            })) : undefined
+          }));
+          
+          // Восстанавливаем позицию и масштаб
+          if (data.sp) {
+            this.screenPos = { x: data.sp[0], y: data.sp[1] };
+          }
+          this.screenZoom = data.sz || 0.2;
+          this.gridSize = data.gs || 0.1;
+          
+          console.log('Автосохраненные данные загружены');
+          
+          // Показываем уведомление пользователю
+          if (this.layers.length > 0) {
+            setTimeout(() => {
+              alert('Восстановлены автосохраненные данные. Автосохранение включено по умолчанию.');
+            }, 1000);
+          }
+        }
+      } catch (error) {
+        console.error('Ошибка загрузки автосохраненных данных:', error);
+        // Удаляем поврежденные данные
+        localStorage.removeItem(this.autoSaveKey);
+      }
+    },
+    
+    clearAutosaveData() {
+      try {
+        localStorage.removeItem(this.autoSaveKey);
+        // НЕ удаляем настройки при экспорте, только данные
+        console.log('Автосохраненные данные очищены');
+      } catch (error) {
+        console.error('Ошибка очистки автосохраненных данных:', error);
+      }
+    },
+    
+    startAutosave() {
+      if (this.autoSaveInterval) {
+        clearInterval(this.autoSaveInterval);
+      }
+      
+      this.autoSaveInterval = setInterval(() => {
+        this.saveToAutosave();
+      }, 30000); // Автосохранение каждые 30 секунд
+      
+      console.log('Автосохранение включено');
+    },
+    
+    stopAutosave() {
+      if (this.autoSaveInterval) {
+        clearInterval(this.autoSaveInterval);
+        this.autoSaveInterval = null;
+        console.log('Автосохранение отключено');
+      }
+    },
+    
+    toggleAutosave(enabled) {
+      this.autoSaveEnabled = enabled;
+      
+      // Сохраняем настройки в кеш
+      this.saveAutosaveSettings();
+      
+      if (enabled) {
+        this.startAutosave();
+        // Сразу сохраняем текущее состояние
+        this.saveToAutosave();
+      } else {
+        this.stopAutosave();
+      }
+    },
+    
+    // Сохранение настроек автосохранения
+    saveAutosaveSettings() {
+      try {
+        const settings = {
+          enabled: this.autoSaveEnabled,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(this.autoSaveSettingsKey, JSON.stringify(settings));
+      } catch (error) {
+        console.error('Ошибка сохранения настроек автосохранения:', error);
+      }
+    },
+    
+    // Загрузка настроек автосохранения
+    loadAutosaveSettings() {
+      try {
+        const savedSettings = localStorage.getItem(this.autoSaveSettingsKey);
+        if (savedSettings) {
+          const settings = JSON.parse(savedSettings);
+          
+          // Проверяем, что настройки не слишком старые (например, не старше 30 дней)
+          const maxAge = 30 * 24 * 60 * 60 * 1000; // 30 дней в миллисекундах
+          if (settings.timestamp && (Date.now() - settings.timestamp) > maxAge) {
+            console.log('Настройки автосохранения устарели, используем значения по умолчанию');
+            return;
+          }
+          
+          this.autoSaveEnabled = settings.enabled !== undefined ? settings.enabled : true;
+          
+          // Если автосохранение включено, запускаем его
+          if (this.autoSaveEnabled) {
+            this.startAutosave();
+          }
+        }
+      } catch (error) {
+        console.error('Ошибка загрузки настроек автосохранения:', error);
+        // Используем значения по умолчанию
+        this.autoSaveEnabled = true;
+        this.startAutosave();
+      }
     },
   },
   watch: {
@@ -1377,6 +1851,26 @@ export default {
         this.isDrawingLine = false;
         this.hoveredVertex = null;
       }
+    }
+  },
+  computed: {
+    // Проверяем, есть ли на холсте какие-либо объекты (линии, многоугольники, изображения)
+    isCanvasEmpty() {
+      // Проверяем наличие изображений
+      const hasImages = this.layers.some(layer => layer.img);
+      
+      // Проверяем наличие линий
+      const linesLayer = this.layers.find(l => l.name === 'Линии');
+      const hasLines = linesLayer && linesLayer.lines && linesLayer.lines.length > 0;
+      
+      // Проверяем наличие многоугольников
+      const polygonsLayer = this.layers.find(l => l.name === 'Многоугольники');
+      const hasPolygons = polygonsLayer && polygonsLayer.polygons && polygonsLayer.polygons.length > 0;
+      
+      // Проверяем, есть ли временные объекты в процессе рисования
+      const hasTemporaryObjects = this.isDrawingLine || this.isDrawingPolygon;
+      
+      return !hasImages && !hasLines && !hasPolygons && !hasTemporaryObjects;
     }
   }
 };
@@ -1556,5 +2050,52 @@ a {
 .help-btn:hover {
   background: #ffd700;
   color: #23272f;
+}
+
+/* Индикатор автосохранения */
+.autosave-indicator {
+  position: fixed;
+  bottom: 2em;
+  left: 2em;
+  background: #23272f;
+  color: #ffd700;
+  border: 1px solid #ffd700;
+  border-radius: 8px;
+  padding: 0.5em 1em;
+  font-size: 0.9em;
+  font-weight: 500;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: all 0.3s ease;
+}
+
+.autosave-indicator.saving {
+  background: #ffd700;
+  color: #23272f;
+}
+
+.autosave-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s infinite;
+}
+
+.autosave-indicator.saving .autosave-dot {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>

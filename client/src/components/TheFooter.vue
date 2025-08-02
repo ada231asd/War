@@ -22,15 +22,15 @@
           <div class="footer-section">
             <h3>Сообщество</h3>
             <a href="https://discord.gg/K883Dstznr" class="social-link" target="_blank">
-              <img src="../assets/images/discord-icon.svg" alt="Discord">
+              <img src="" alt="Discord">
               Discord KIVOT
             </a>
             <a href="https://t.me/+_ckKwzhPX6w2NWIy" class="social-link" target="_blank">
-              <img src="../assets/images/telegram-icon.svg" alt="Telegram" style="background:#229ed9;border-radius:50%;">
+              <img src="" alt="Telegram" style="background:#229ed9;border-radius:50%;">
               Telegram KIVOT
             </a>
             <a href="https://t.me/+z3AjsTCRgDpkZWNi" class="social-link" target="_blank">
-              <img src="../assets/images/telegram-icon.svg" alt="Telegram" style="background:#229ed9;border-radius:50%;">
+              <img src="" alt="Telegram" style="background:#229ed9;border-radius:50%;">
               Telegram-чат сайта
             </a>
           </div>

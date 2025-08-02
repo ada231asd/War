@@ -28,7 +28,7 @@
         <span class="toggle-slider"></span>
       </span>
     </div>
-    <div class="menu-block">
+    <div class="menu-block menu-btn-row">
       <button class="menu-btn" @click="exportFile">Экспортировать</button>
     </div>
   </div>
@@ -38,7 +38,10 @@
 export default {
   name: 'SightEditorMenu',
   props: {
-    autoSaveEnabled: Boolean
+    autoSaveEnabled: {
+      type: Boolean,
+      default: false
+    }
   },
   data() {
     return {
@@ -89,7 +92,7 @@ export default {
       this.$emit('export', this.saveFileName);
     },
     toggleAutosave() {
-      this.$emit('toggle-autosave', !this.autoSaveEnabled);
+      this.$emit('autosave');
     }
   }
 };

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест размера автосохранения</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .size-info { color: #666; }
+        .optimized { color: green; }
+        .original { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Тест оптимизации размера автосохранения</h1>
+    
+    <button onclick="testDataSize()">Запустить тест</button>
+    <button onclick="clearTestData()">Очистить тестовые данные</button>
+    
+    <div id="results"></div>
+
+    <script>
+        function testDataSize() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<h2>Результаты теста:</h2>';
+            
+            // Создаем тестовые данные
+            const testLayers = [
+                {
+                    id: 'layer1',
+                    name: 'Линии',
+                    type: 'lines',
+                    width: 1,
+                    height: 1,
+                    shiftX: 0,
+                    shiftY: 0,
+                    opacity: 1,
+                    lines: [
+                        {
+                            points: [
+                                { x: 0.1, y: 0.2 },
+                                { x: 0.3, y: 0.4 },
+                                { x: 0.5, y: 0.6 }
+                            ]
+                        },
+                        {
+                            points: [
+                                { x: -0.1, y: -0.2 },
+                                { x: -0.3, y: -0.4 }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: 'layer2',
+                    name: 'Многоугольники',
+                    type: 'polygons',
+                    width: 1,
+                    height: 1,
+                    shiftX: 0,
+                    shiftY: 0,
+                    opacity: 0.8,
+                    polygons: [
+                        {
+                            points: [
+                                { x: 0.1, y: 0.1 },
+                                { x: 0.2, y: 0.1 },
+                                { x: 0.2, y: 0.2 },
+                                { x: 0.1, y: 0.2 }
+                            ]
+                        }
+                    ]
+                }
+            ];
+            
+            // Оригинальный формат
+            const originalData = {
+                layers: testLayers.map(layer => ({
+                    ...layer,
+                    img: null
+                })),
+                screenPos: { x: 0, y: 0.1 },
+                screenZoom: 0.2,
+                gridSize: 0.1,
+                timestamp: Date.now()
+            };
+            
+            // Оптимизированный формат
+            const optimizedData = {
+                l: testLayers.map(layer => ({
+                    id: layer.id,
+                    n: layer.name,
+                    t: layer.type,
+                    w: layer.width,
+                    h: layer.height,
+                    sx: layer.shiftX,
+                    sy: layer.shiftY,
+                    o: layer.opacity,
+                    ln: layer.lines ? layer.lines.map(line => ({
+                        p: line.points.map(p => [p.x, p.y])
+                    })) : undefined,
+                    pg: layer.polygons ? layer.polygons.map(poly => ({
+                        p: poly.points.map(p => [p.x, p.y])
+                    })) : undefined
+                })),
+                sp: [0, 0.1],
+                sz: 0.2,
+                gs: 0.1,
+                ts: Date.now()
+            };
+            
+            // Сохраняем тестовые данные
+            localStorage.setItem('test_original', JSON.stringify(originalData));
+            localStorage.setItem('test_optimized', JSON.stringify(optimizedData));
+            
+            // Вычисляем размеры
+            const originalSize = JSON.stringify(originalData).length;
+            const optimizedSize = JSON.stringify(optimizedData).length;
+            const savings = originalSize - optimizedSize;
+            const savingsPercent = ((savings / originalSize) * 100).toFixed(1);
+            
+            // Показываем результаты
+            results.innerHTML += `
+                <div class="test-result">
+                    <h3>Размер данных:</h3>
+                    <div class="size-info original">
+                        <strong>Оригинальный формат:</strong> ${originalSize} байт
+                    </div>
+                    <div class="size-info optimized">
+                        <strong>Оптимизированный формат:</strong> ${optimizedSize} байт
+                    </div>
+                    <div class="optimized">
+                        <strong>Экономия:</strong> ${savings} байт (${savingsPercent}%)
+                    </div>
+                </div>
+                
+                <div class="test-result">
+                    <h3>Примеры данных:</h3>
+                    <details>
+                        <summary>Оригинальный формат</summary>
+                        <pre>${JSON.stringify(originalData, null, 2)}</pre>
+                    </details>
+                    <details>
+                        <summary>Оптимизированный формат</summary>
+                        <pre>${JSON.stringify(optimizedData, null, 2)}</pre>
+                    </details>
+                </div>
+            `;
+        }
+        
+        function clearTestData() {
+            localStorage.removeItem('test_original');
+            localStorage.removeItem('test_optimized');
+            document.getElementById('results').innerHTML = '<p>Тестовые данные очищены</p>';
+        }
+    </script>
+</body>
+</html> 

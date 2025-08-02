@@ -22,8 +22,7 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
-              url('@/assets/images/hero-bg.jpg') center/cover;
+  background: linear-gradient(120deg, #23272f 0%, #3a3f4b 100%);
   color: #fff;
 
   .hero-content {
