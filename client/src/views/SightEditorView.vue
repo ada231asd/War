@@ -35,6 +35,7 @@
         @file-loaded="onFileLoaded"
         @export="onExportFile"
         @autosave="onAutosave"
+        @preview-sight="onPreviewSight"
         @set-opacity="setReferenceOpacity"
         @reset-size="resetSelectedLayerSize"
       />
@@ -60,9 +61,9 @@
       </div>
       
       <!-- Индикатор автосохранения -->
-      <div v-if="autoSaveEnabled" class="autosave-indicator" :class="{ saving: isAutoSaving }">
-        <span class="autosave-text">{{ isAutoSaving ? 'Сохранение...' : 'Автосохранение включено' }}</span>
+      <div class="autosave-indicator" v-if="isAutoSaving">
         <span class="autosave-dot"></span>
+        <span class="autosave-text">Сохранение...</span>
       </div>
       
       <a id="saver"></a>
@@ -92,6 +93,13 @@
         </div>
       </div>
     </div>
+    
+    <!-- Компонент предпросмотра прицела -->
+    <SightPreview
+      :isVisible="showPreview"
+      :layers="layers"
+      @close="closePreview"
+    />
   </div>
 </template>
 
@@ -99,12 +107,13 @@
 import editorConfig from '../sightEditor/config';
 import SightEditorMenu from '../components/sightEditor/SightEditorMenu.vue';
 import LayersPanel from '../components/sightEditor/LayersPanel.vue';
+import SightPreview from '../components/sightEditor/SightPreview.vue';
 import { drawGhostPolygon, findNearestVertex as findNearestPolyVertex } from '../components/sightEditor/tools/polygonTool.js';
 import earcut from 'earcut';
 
 export default {
   name: 'SightEditorView',
-  components: { SightEditorMenu, LayersPanel },
+  components: { SightEditorMenu, LayersPanel, SightPreview },
   data() {
     return {
       screenPos: { x: 0, y: 0.1 },
@@ -162,6 +171,9 @@ export default {
       isAutoSaving: false,
       // --- консоль ---
       consoleLog: [],
+      // --- предпросмотр прицела ---
+      showPreview: false,
+      previewBlkData: '',
     };
   },
   mounted() {
@@ -180,8 +192,26 @@ export default {
     
     // Загружаем настройки автосохранения
     this.loadAutosaveSettings();
-    // Загружаем автосохраненные данные при старте
+    
+    // Загружаем автосохраненные данные
     this.loadAutosavedData();
+    
+    // Создаем стандартный прицел если нет слоев
+    if (this.layers.length === 0) {
+      this.createDefaultSight();
+    }
+    
+    // Запускаем автосохранение
+    this.startAutosave();
+    
+    // Добавляем глобальную функцию для отладки
+    window.clearSightEditorStorage = () => {
+      localStorage.removeItem('sightEditor_autosave');
+      localStorage.removeItem('sightEditor_settings');
+      console.log('✅ localStorage очищен. Обновите страницу.');
+    };
+    
+    console.log('💡 Для очистки localStorage используйте: clearSightEditorStorage()');
   },
   beforeUnmount() {
     window.removeEventListener('resize', this.updateCanvasSize);
@@ -439,36 +469,36 @@ export default {
         
         // Рисуем линии
         if (layer.lines && layer.lines.length > 0) {
-          this.ctx.strokeStyle = 'black';
-          this.ctx.lineWidth = 2;
+        this.ctx.strokeStyle = 'black';
+        this.ctx.lineWidth = 2;
           for (const line of layer.lines) {
-            if (line.points.length < 2) continue;
-            this.ctx.beginPath();
-            const start = this.sightToCanvas(line.points[0]);
-            this.ctx.moveTo(start.x, start.y);
-            for (let i = 1; i < line.points.length; i++) {
-              const pt = this.sightToCanvas(line.points[i]);
-              this.ctx.lineTo(pt.x, pt.y);
-            }
-            this.ctx.stroke();
+          if (line.points.length < 2) continue;
+          this.ctx.beginPath();
+          const start = this.sightToCanvas(line.points[0]);
+          this.ctx.moveTo(start.x, start.y);
+          for (let i = 1; i < line.points.length; i++) {
+            const pt = this.sightToCanvas(line.points[i]);
+            this.ctx.lineTo(pt.x, pt.y);
           }
+          this.ctx.stroke();
+        }
         }
         
         // Рисуем многоугольники
         if (layer.polygons && layer.polygons.length > 0) {
-          this.ctx.fillStyle = 'black';
+        this.ctx.fillStyle = 'black';
           for (const poly of layer.polygons) {
-            if (poly.points.length < 3) continue;
-            this.ctx.beginPath();
-            const start = this.sightToCanvas(poly.points[0]);
-            this.ctx.moveTo(start.x, start.y);
-            for (let i = 1; i < poly.points.length; i++) {
-              const pt = this.sightToCanvas(poly.points[i]);
-              this.ctx.lineTo(pt.x, pt.y);
-            }
-            this.ctx.closePath();
-            this.ctx.fill();
+          if (poly.points.length < 3) continue;
+          this.ctx.beginPath();
+          const start = this.sightToCanvas(poly.points[0]);
+          this.ctx.moveTo(start.x, start.y);
+          for (let i = 1; i < poly.points.length; i++) {
+            const pt = this.sightToCanvas(poly.points[i]);
+            this.ctx.lineTo(pt.x, pt.y);
           }
+          this.ctx.closePath();
+          this.ctx.fill();
+        }
         }
         
         this.ctx.restore();
@@ -1700,16 +1730,18 @@ export default {
         if (savedData) {
           const data = JSON.parse(savedData);
           
-          // Проверяем, что данные не слишком старые (например, не старше 7 дней)
+          // Проверяем возраст данных (7 дней)
+          const dataAge = Date.now() - data.ts;
           const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 дней в миллисекундах
-          if (data.ts && (Date.now() - data.ts) > maxAge) {
+          
+          if (dataAge > maxAge) {
             console.log('Автосохраненные данные устарели, удаляем');
-            localStorage.removeItem(this.autoSaveKey);
+            this.clearAutosaveData();
             return;
           }
           
-          // Восстанавливаем данные из оптимизированной структуры
-          this.layers = (data.l || []).map(layer => ({
+          // Восстанавливаем данные
+          this.layers = data.l.map(layer => ({
             id: layer.id,
             name: layer.n,
             type: layer.t,
@@ -1718,37 +1750,19 @@ export default {
             shiftX: layer.sx,
             shiftY: layer.sy,
             opacity: layer.o,
-            img: null, // Изображения не сохраняются
-            // Восстанавливаем линии
-            lines: layer.ln ? layer.ln.map(line => ({
-              points: line.p.map(p => ({ x: p[0], y: p[1] }))
-            })) : undefined,
-            // Восстанавливаем многоугольники
-            polygons: layer.pg ? layer.pg.map(poly => ({
-              points: poly.p.map(p => ({ x: p[0], y: p[1] }))
-            })) : undefined
+            lines: layer.ln ? layer.ln.map(line => ({ points: line.p.map(p => ({ x: p[0], y: p[1] })) })) : undefined,
+            polygons: layer.pg ? layer.pg.map(poly => ({ points: poly.p.map(p => ({ x: p[0], y: p[1] })) })) : undefined
           }));
           
-          // Восстанавливаем позицию и масштаб
-          if (data.sp) {
-            this.screenPos = { x: data.sp[0], y: data.sp[1] };
-          }
-          this.screenZoom = data.sz || 0.2;
-          this.gridSize = data.gs || 0.1;
+          this.screenPos = { x: data.sp[0], y: data.sp[1] };
+          this.screenZoom = data.sz;
+          this.gridSize = data.gs;
           
-          console.log('Автосохраненные данные загружены');
-          
-          // Показываем уведомление пользователю
-          if (this.layers.length > 0) {
-            setTimeout(() => {
-              alert('Восстановлены автосохраненные данные. Автосохранение включено по умолчанию.');
-            }, 1000);
-          }
+          console.log('Автосохраненные данные восстановлены');
         }
       } catch (error) {
         console.error('Ошибка загрузки автосохраненных данных:', error);
-        // Удаляем поврежденные данные
-        localStorage.removeItem(this.autoSaveKey);
+        this.clearAutosaveData();
       }
     },
     
@@ -1837,6 +1851,121 @@ export default {
         this.autoSaveEnabled = true;
         this.startAutosave();
       }
+    },
+    
+    // --- Предпросмотр прицела ---
+    onPreviewSight() {
+      console.log('SightEditorView: onPreviewSight - все слои:', this.layers);
+      
+      // Выводим все имена слоев
+      console.log('SightEditorView: имена всех слоев:');
+      this.layers.forEach((layer, index) => {
+        console.log(`  Слой ${index + 1}: "${layer.name}" (тип: ${layer.type})`);
+      });
+      
+      // Проверяем наличие слоев "Линии" и "Многоугольники"
+      const linesLayer = this.layers.find(l => l.name === 'Линии');
+      const polygonLayer = this.layers.find(l => l.name === 'Многоугольники');
+      
+      console.log('SightEditorView: слой линий:', linesLayer);
+      console.log('SightEditorView: слой многоугольников:', polygonLayer);
+      
+      if (linesLayer) {
+        console.log('SightEditorView: линий найдено:', linesLayer.lines ? linesLayer.lines.length : 0);
+        if (linesLayer.lines) {
+          for (let i = 0; i < linesLayer.lines.length; i++) {
+            console.log(`SightEditorView: линия ${i + 1}:`, linesLayer.lines[i]);
+            if (linesLayer.lines[i].points) {
+              console.log(`SightEditorView: линия ${i + 1} координаты:`, linesLayer.lines[i].points);
+              linesLayer.lines[i].points.forEach((point, j) => {
+                console.log(`  Точка ${j + 1}: x=${point.x}, y=${point.y}`);
+              });
+            }
+          }
+        }
+      }
+      
+      if (polygonLayer) {
+        console.log('SightEditorView: многоугольников найдено:', polygonLayer.polygons ? polygonLayer.polygons.length : 0);
+        if (polygonLayer.polygons) {
+          for (let i = 0; i < polygonLayer.polygons.length; i++) {
+            console.log(`SightEditorView: многоугольник ${i + 1}:`, polygonLayer.polygons[i]);
+          }
+        }
+      }
+      
+      // Показываем предпросмотр с текущими слоями
+      this.showPreview = true;
+    },
+    
+    closePreview() {
+      this.showPreview = false;
+    },
+    
+    // Создание стандартного прицела по умолчанию
+    createDefaultSight() {
+      // Создаем слой с многоугольником (темно-серый)
+      const polygonLayer = {
+        id: Date.now() + 1,
+        name: 'Многоугольники',
+        type: 'polygon',
+        width: 100,
+        height: 100,
+        shiftX: 0,
+        shiftY: 0,
+        opacity: 0.7,
+        polygons: [{
+          points: [
+            { x: -30, y: 20 },   // top-left
+            { x: 30, y: 20 },    // top-right
+            { x: 40, y: 10 },    // far-right
+            { x: 30, y: -10 },   // bottom-right
+            { x: -20, y: -10 },  // bottom-left
+            { x: -30, y: 10 }    // far-left
+          ]
+        }]
+      };
+      
+      // Создаем слой с линиями (черные)
+      const linesLayer = {
+        id: Date.now() + 2,
+        name: 'Линии',
+        type: 'line',
+        width: 100,
+        height: 100,
+        shiftX: 0,
+        shiftY: 0,
+        opacity: 1.0,
+        lines: [
+          // Линия от точки (+5, -5) к top-left вершине (-30, 20)
+          {
+            points: [
+              { x: 5, y: -5 },
+              { x: -30, y: 20 }
+            ]
+          },
+          // Линия от точки (+5, -5) к top-right вершине (30, 20)
+          {
+            points: [
+              { x: 5, y: -5 },
+              { x: 30, y: 20 }
+            ]
+          },
+          // Линия от точки (+5, -5) к bottom-left вершине (-20, -10)
+          {
+            points: [
+              { x: 5, y: -5 },
+              { x: -20, y: -10 }
+            ]
+          }
+        ]
+      };
+      
+      // Добавляем слои
+      this.layers.push(polygonLayer, linesLayer);
+      
+      // Сохраняем в автосохранение
+      this.saveToAutosave();
     },
   },
   watch: {
@@ -2055,47 +2184,38 @@ a {
 /* Индикатор автосохранения */
 .autosave-indicator {
   position: fixed;
-  bottom: 2em;
-  left: 2em;
-  background: #23272f;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(35, 39, 47, 0.9);
   color: #ffd700;
-  border: 1px solid #ffd700;
-  border-radius: 8px;
-  padding: 0.5em 1em;
-  font-size: 0.9em;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
   font-weight: 500;
-  z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 0.5em;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  transition: all 0.3s ease;
-}
-
-.autosave-indicator.saving {
-  background: #ffd700;
-  color: #23272f;
+  gap: 8px;
+  z-index: 1000;
+  border: 1px solid #ffd700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: opacity 0.3s ease;
 }
 
 .autosave-dot {
   width: 8px;
   height: 8px;
+  background: #ffd700;
   border-radius: 50%;
-  background: currentColor;
-  animation: pulse 2s infinite;
-}
-
-.autosave-indicator.saving .autosave-dot {
-  animation: spin 1s linear infinite;
+  animation: pulse 1.5s infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
+  0% { opacity: 1; }
   50% { opacity: 0.5; }
+  100% { opacity: 1; }
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.autosave-text {
+  white-space: nowrap;
 }
 </style>

@@ -31,6 +31,9 @@
     <div class="menu-block menu-btn-row">
       <button class="menu-btn" @click="exportFile">Экспортировать</button>
     </div>
+    <div class="menu-block menu-btn-row">
+      <button class="preview-btn" @click="previewSight">Предпросмотр прицела</button>
+    </div>
   </div>
 </template>
 
@@ -93,6 +96,9 @@ export default {
     },
     toggleAutosave() {
       this.$emit('autosave');
+    },
+    previewSight() {
+      this.$emit('preview-sight');
     }
   }
 };
@@ -193,5 +199,25 @@ export default {
 .autosave-toggle.enabled .toggle-slider {
   left: 22px;
   background: #23272f;
+}
+
+.preview-btn {
+  background: #808080;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5em 1.2em;
+  font-weight: bold;
+  font-family: Arial, sans-serif;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 200px;
+  height: 50px;
+  margin: 0;
+}
+
+.preview-btn:hover {
+  background: #606060;
 }
 </style> 
