@@ -87,7 +87,7 @@ export default {
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (ev) => {
-        this.$emit('file-loaded', ev.target.result);
+        this.$emit('file-loaded', ev.target.result, file.name);
       };
       reader.readAsText(file);
     },

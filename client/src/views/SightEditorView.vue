@@ -56,6 +56,108 @@
         style="position: fixed; right: 2em; top: 2em;"
       />
       
+      <!-- Окно трансформации изображения -->
+      <div v-if="showTransformWindow" class="transform-window">
+        <div class="transform-header">
+          <h3>Преобразование рисунка</h3>
+          <button class="close-btn" @click="closeTransformWindow">&times;</button>
+        </div>
+        <div class="transform-content">
+          <!-- Секция для трансформации отрисованного рисунка -->
+          <div class="transform-section">
+            <h4>Трансформация рисунка:</h4>
+            <div class="transform-field">
+              <label>Смещение X:</label>
+              <input 
+                type="number" 
+                v-model.number="transformValues.offsetX" 
+                step="0.01"
+                @input="updateTransformButton"
+              />
+            </div>
+            <div class="transform-field">
+              <label>Смещение Y:</label>
+              <input 
+                type="number" 
+                v-model.number="transformValues.offsetY" 
+                step="0.01"
+                @input="updateTransformButton"
+              />
+            </div>
+            <div class="transform-field">
+              <label>Поворот:</label>
+              <input 
+                type="number" 
+                v-model.number="transformValues.rotation" 
+                step="1"
+                @input="updateTransformButton"
+              />
+            </div>
+            <div class="transform-field">
+              <label>Масштаб X:</label>
+              <input 
+                type="number" 
+                v-model.number="transformValues.scaleX" 
+                step="0.01"
+                min="0.01"
+                @input="updateTransformButton"
+              />
+            </div>
+            <div class="transform-field">
+              <label>Масштаб Y:</label>
+              <input 
+                type="number" 
+                v-model.number="transformValues.scaleY" 
+                step="0.01"
+                min="0.01"
+                @input="updateTransformButton"
+              />
+            </div>
+          </div>
+          
+          <!-- Секция для коррекции фото -->
+          <div class="transform-section" v-if="selectedImageLayer">
+            <h4>Коррекция фото:</h4>
+            <div class="transform-field">
+              <label>Смещение X:</label>
+              <input 
+                type="number" 
+                v-model.number="transformValues.imageOffsetX" 
+                step="0.01"
+                @input="updateTransformButton"
+              />
+            </div>
+            <div class="transform-field">
+              <label>Смещение Y:</label>
+              <input 
+                type="number" 
+                v-model.number="transformValues.imageOffsetY" 
+                step="0.01"
+                @input="updateTransformButton"
+              />
+            </div>
+            <div class="transform-field">
+              <label>Размер:</label>
+              <input 
+                type="number" 
+                v-model.number="transformValues.imageSize" 
+                step="0.01"
+                min="0.01"
+                @input="updateTransformButton"
+              />
+            </div>
+          </div>
+          
+          <button 
+            class="apply-btn" 
+            :disabled="!canApplyTransform"
+            @click="applyTransform"
+          >
+            Применить
+          </button>
+        </div>
+      </div>
+      
       <div id="hints" style="text-align: center; margin: auto; font-size: 0.8em; user-select: none;">
         <span id="hintsText"></span>
       </div>
@@ -71,46 +173,60 @@
         ?
       </button>
       <div v-if="showHelp" class="modal-overlay">
-        <div class="modal-window" style="max-width:520px;">
-          <h3>Справка по редактору прицелов</h3>
-          
-          <div style="text-align:left;font-size:1.1em;line-height:1.6;margin:1em 0;">
-            <h4 style="color:#ffd700;margin-bottom:0.5em;">🎯 Основные инструменты:</h4>
-            <ul style="margin:0.5em 0;padding-left:1.5em;">
-              <li><b>Выборка</b> — выделение и редактирование объектов</li>
-              <li><b>Линия</b> — создание линий прицела</li>
-              <li><b>Многоугольник</b> — создание заливок</li>
-            </ul>
-            
-            <h4 style="color:#ffd700;margin:1em 0 0.5em 0;">⌨️ Горячие клавиши:</h4>
-            <ul style="margin:0.5em 0;padding-left:1.5em;">
-              <li><b>Ctrl+Z</b> / <b>Ctrl+Я</b> — отменить действие</li>
-              <li><b>Ctrl+Y</b> / <b>Ctrl+Н</b> — повторить действие</li>
-              <li><b>Delete</b> — удалить выбранный объект</li>
-              <li><b>Alt+колесо мыши</b> — масштабирование</li>
-              <li><b>ПКМ</b> — перемещение холста</li>
-            </ul>
-            
-            <h4 style="color:#ffd700;margin:1em 0 0.5em 0;">🔧 Полезные советы:</h4>
-            <ul style="margin:0.5em 0;padding-left:1.5em;">
-              <li>Зажмите <b>Ctrl</b> для привязки к вершинам</li>
-              <li>Используйте <b>Shift+клик</b> для выделения многоугольников</li>
-              <li>Двойной клик по первой точке замыкает многоугольник</li>
-              <li>Автосохранение происходит каждые 30 секунд</li>
-              <li>Экспортируйте в .blk для использования в игре</li>
-            </ul>
-            
-            <h4 style="color:#ffd700;margin:1em 0 0.5em 0;">💾 Работа с файлами:</h4>
-            <ul style="margin:0.5em 0;padding-left:1.5em;">
-              <li><b>Сохранить</b> — сохранить проект в .txt</li>
-              <li><b>Загрузить</b> — открыть сохраненный проект</li>
-              <li><b>Экспорт</b> — создать .blk файл для игры</li>
-              <li><b>Предпросмотр</b> — увидеть прицел в действии</li>
-            </ul>
+        <div class="help-modal-window">
+          <div class="help-header">
+            <h3>Справка по редактору прицелов</h3>
+            <button class="help-close-btn" @click="showHelp = false">&times;</button>
           </div>
           
-          <div style="text-align:right;margin-top:1.5em;">
-            <button @click="showHelp = false" style="background:#23272f;color:#ffd700;border:1px solid #ffd700;border-radius:6px;padding:0.5em 1.2em;font-size:1.1em;cursor:pointer;">Закрыть</button>
+          <div class="help-content">
+            <div class="help-section">
+              <h4>🎯 Основные инструменты:</h4>
+              <ul>
+                <li><b>Выборка</b> — выделение и редактирование объектов</li>
+                <li><b>Линия</b> — создание линий прицела</li>
+                <li><b>Многоугольник</b> — создание заливок</li>
+              </ul>
+            </div>
+            
+            <div class="help-section">
+              <h4>⌨️ Горячие клавиши:</h4>
+              <ul>
+                <li><b>Ctrl+Z</b> / <b>Ctrl+Я</b> — отменить действие</li>
+                <li><b>Ctrl+Y</b> / <b>Ctrl+Н</b> / <b>Ctrl+Shift+Z</b> — повторить действие</li>
+                <li><b>Delete</b> — удалить выбранный объект</li>
+                <li><b>Alt+колесо мыши</b> — масштабирование</li>
+                <li><b>ПКМ</b> — перемещение холста</li>
+                <li><b>Caps Lock</b> — открыть окно трансформации рисунка</li>
+              </ul>
+            </div>
+            
+            <div class="help-section">
+              <h4>🔧 Полезные советы:</h4>
+              <ul>
+                <li>Зажмите <b>Ctrl</b> для привязки к вершинам</li>
+                <li>Используйте <b>Shift+клик</b> для выделения многоугольников</li>
+                <li>Двойной клик по первой точке замыкает многоугольник</li>
+                <li>Клик по пустой области сбрасывает все выделения</li>
+                <li>Нажмите <b>Caps Lock</b> для трансформации отрисованного рисунка и коррекции фото (работает даже без рисунка)</li>
+                <li>Автосохранение происходит каждые 30 секунд</li>
+                <li>Экспортируйте в .blk для использования в игре</li>
+              </ul>
+            </div>
+            
+            <div class="help-section">
+              <h4>💾 Работа с файлами:</h4>
+              <ul>
+                <li><b>Сохранить</b> — сохранить проект в .txt</li>
+                <li><b>Загрузить</b> — открыть сохраненный проект (.txt, .blk)</li>
+                <li><b>Экспорт</b> — создать .blk файл для игры</li>
+                <li><b>Предпросмотр</b> — увидеть прицел в действии</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div class="help-footer">
+            <button class="help-close-button" @click="showHelp = false">Закрыть</button>
           </div>
         </div>
       </div>
@@ -201,6 +317,28 @@ export default {
       historyIndex: -1, // текущий индекс в истории
       maxHistorySize: 50, // максимальное количество состояний в истории
       isUndoRedoAction: false, // флаг для предотвращения записи в историю при отмене/возврате
+      showTransformWindow: false,
+      transformValues: {
+        offsetX: 0,
+        offsetY: 0,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+        imageSize: 1,
+        imageOffsetX: 0,
+        imageOffsetY: 0
+      },
+      canApplyTransform: false,
+      savedTransformValues: {
+        offsetX: 0,
+        offsetY: 0,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+        imageSize: 1,
+        imageOffsetX: 0,
+        imageOffsetY: 0
+      }
     };
   },
   mounted() {
@@ -691,6 +829,12 @@ export default {
         this.freeTransform = true;
       }
       
+      // Обработка Caps Lock для открытия окна трансформации
+      if (e.key === 'CapsLock') {
+        e.preventDefault();
+        this.openTransformWindow();
+      }
+      
       // Обработка Ctrl+Z (отмена) - поддержка русской и английской раскладки
       if (e.ctrlKey && (e.key === 'z' || e.key === 'я') && !e.shiftKey) {
         e.preventDefault();
@@ -752,13 +896,14 @@ export default {
       return inside;
     },
     onCanvasClick(e) {
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      
       if (this.tool === 'select') {
         let minDist = 30;
         let foundType = null;
         let foundIdx = null;
-        const rect = this.canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
         
         // Привязка к ближайшей вершине при зажатом Ctrl
         if (this.isCtrlDown && this.hoveredSnapVertex) {
@@ -952,6 +1097,65 @@ export default {
         }
         return;
       }
+      // Сброс выделения при клике на пустую область
+      if (this.tool === 'select') {
+        // Проверяем, был ли клик по пустой области
+        let clickedOnObject = false;
+        
+        // Проверяем попадание в линии
+        const linesLayer = this.layers.find(l => l.name === 'Линии');
+        if (linesLayer && linesLayer.lines) {
+          for (const line of linesLayer.lines) {
+            for (let i = 1; i < line.points.length; i++) {
+              const c1 = this.sightToCanvas(line.points[i - 1]);
+              const c2 = this.sightToCanvas(line.points[i]);
+              const dist = this.pointToSegmentDist(mx, my, c1.x, c1.y, c2.x, c2.y);
+              if (dist < 30) {
+                clickedOnObject = true;
+                break;
+              }
+            }
+            if (clickedOnObject) break;
+          }
+        }
+        
+        // Проверяем попадание в многоугольники
+        if (!clickedOnObject) {
+          const polygonsLayer = this.layers.find(l => l.name === 'Многоугольники');
+          if (polygonsLayer && polygonsLayer.polygons) {
+            for (const poly of polygonsLayer.polygons) {
+              const screenPoints = poly.points.map(pt => this.sightToCanvas(pt));
+              if (this.pointInPolygon(mx, my, screenPoints)) {
+                clickedOnObject = true;
+                break;
+              }
+            }
+          }
+        }
+        
+        // Проверяем попадание в изображения
+        if (!clickedOnObject) {
+          for (const layer of this.layers) {
+            if (layer.img) {
+              const from = this.v2disposSight2v2canvas({ x: -layer.width / 2 + layer.shiftX, y: -layer.height / 2 + layer.shiftY });
+              const to = this.v2disposSight2v2canvas({ x: layer.width / 2 + layer.shiftX, y: layer.height / 2 + layer.shiftY });
+              if (mx >= from.x && mx <= to.x && my >= from.y && my <= to.y) {
+                clickedOnObject = true;
+                break;
+              }
+            }
+          }
+        }
+        
+        // Если клик был по пустой области - сбрасываем все выделения
+        if (!clickedOnObject) {
+          this.selectedElement = null;
+          this.selectedPolygonIdx = null;
+          this.selectedLayerId = null;
+          this.selectedObjectId = null;
+        }
+      }
+      
       this.isCtrlDown = false;
       this.hoveredVertex = null;
       this.drawingPolygon = null;
@@ -1259,10 +1463,15 @@ export default {
       a.click();
       URL.revokeObjectURL(a.href);
     },
-    async onFileLoaded(fileContent) {
-      // Пробуем распарсить как JSON (txt) или SVG
+    async onFileLoaded(fileContent, fileName) {
+      // Определяем тип файла по расширению
+      const isBlkFile = fileName && fileName.toLowerCase().endsWith('.blk');
+      
       try {
-        if (fileContent.trim().startsWith('<svg')) {
+        if (isBlkFile) {
+          // BLK: парсим файл прицела
+          this.parseBlkFile(fileContent);
+        } else if (fileContent.trim().startsWith('<svg')) {
           // SVG: создаём новый слой
           const parser = new DOMParser();
           const svgDoc = parser.parseFromString(fileContent, 'image/svg+xml');
@@ -2123,6 +2332,270 @@ export default {
       this.saveToHistory();
       this.saveToAutosave();
     },
+         updateTransformButton() {
+       this.canApplyTransform = true;
+     },
+     openTransformWindow() {
+       // Собираем все объекты на холсте
+       if (!this.selectAllCanvasObjects()) {
+         return; // Если нет объектов для трансформации, не открываем окно
+       }
+       
+       // Загружаем сохраненные значения или используем значения по умолчанию
+       this.transformValues = { ...this.savedTransformValues };
+       this.canApplyTransform = false;
+       this.showTransformWindow = true;
+     },
+     closeTransformWindow() {
+       // Сохраняем текущие значения перед закрытием
+       this.savedTransformValues = { ...this.transformValues };
+       this.showTransformWindow = false;
+     },
+     selectAllCanvasObjects() {
+       // Выбираем слой с изображением для коррекции
+       const imageLayers = this.layers.filter(layer => layer.img);
+       if (imageLayers.length > 0) {
+         // Выбираем первый слой с изображением
+         this.selectedLayerId = imageLayers[0].id;
+         this.selectLayer(imageLayers[0].id);
+       }
+       
+       // Проверяем наличие линий и многоугольников для трансформации
+       const linesLayer = this.layers.find(l => l.name === 'Линии');
+       const polygonsLayer = this.layers.find(l => l.name === 'Многоугольники');
+       
+       let hasDrawnObjects = false;
+       
+       if (linesLayer && linesLayer.lines && linesLayer.lines.length > 0) {
+         console.log('Найдено линий:', linesLayer.lines.length);
+         hasDrawnObjects = true;
+       }
+       
+       if (polygonsLayer && polygonsLayer.polygons && polygonsLayer.polygons.length > 0) {
+         console.log('Найдено многоугольников:', polygonsLayer.polygons.length);
+         hasDrawnObjects = true;
+       }
+       
+       // Если нет отрисованных объектов, но есть изображения - разрешаем коррекцию фото
+       if (!hasDrawnObjects && imageLayers.length > 0) {
+         console.log('Нет отрисованных объектов, но есть изображения для коррекции');
+         return true;
+       }
+       
+       // Если нет ни объектов, ни изображений
+       if (!hasDrawnObjects && imageLayers.length === 0) {
+         alert('На холсте нет объектов для трансформации или изображений для коррекции');
+         return false;
+       }
+       
+       return true;
+     },
+                applyTransform() {
+       // Применяем трансформацию только к отрисованным объектам (линии и многоугольники)
+       
+       // 1. Трансформируем все линии
+       const linesLayer = this.layers.find(l => l.name === 'Линии');
+       if (linesLayer && linesLayer.lines) {
+         linesLayer.lines.forEach(line => {
+           if (line.points) {
+             line.points.forEach(point => {
+               // Применяем смещение
+               point.x += this.transformValues.offsetX;
+               point.y += this.transformValues.offsetY;
+               
+               // Применяем масштаб относительно центра (0,0)
+               point.x *= this.transformValues.scaleX;
+               point.y *= this.transformValues.scaleY;
+               
+               // Применяем поворот относительно центра (0,0)
+               if (this.transformValues.rotation !== 0) {
+                 const angle = this.transformValues.rotation * Math.PI / 180;
+                 const cos = Math.cos(angle);
+                 const sin = Math.sin(angle);
+                 const newX = point.x * cos - point.y * sin;
+                 const newY = point.x * sin + point.y * cos;
+                 point.x = newX;
+                 point.y = newY;
+               }
+             });
+           }
+         });
+       }
+       
+       // 2. Трансформируем все многоугольники
+       const polygonsLayer = this.layers.find(l => l.name === 'Многоугольники');
+       if (polygonsLayer && polygonsLayer.polygons) {
+         polygonsLayer.polygons.forEach(polygon => {
+           if (polygon.points) {
+             polygon.points.forEach(point => {
+               // Применяем смещение
+               point.x += this.transformValues.offsetX;
+               point.y += this.transformValues.offsetY;
+               
+               // Применяем масштаб относительно центра (0,0)
+               point.x *= this.transformValues.scaleX;
+               point.y *= this.transformValues.scaleY;
+               
+               // Применяем поворот относительно центра (0,0)
+               if (this.transformValues.rotation !== 0) {
+                 const angle = this.transformValues.rotation * Math.PI / 180;
+                 const cos = Math.cos(angle);
+                 const sin = Math.sin(angle);
+                 const newX = point.x * cos - point.y * sin;
+                 const newY = point.x * sin + point.y * cos;
+                 point.x = newX;
+                 point.y = newY;
+               }
+             });
+           }
+         });
+       }
+       
+               // 3. Корректируем выбранное изображение (если есть)
+        const selectedLayer = this.layers.find(l => l.id === this.selectedLayerId);
+        if (selectedLayer && selectedLayer.img) {
+          // Применяем смещение изображения
+          if (this.transformValues.imageOffsetX !== 0) {
+            selectedLayer.shiftX += this.transformValues.imageOffsetX;
+          }
+          if (this.transformValues.imageOffsetY !== 0) {
+            selectedLayer.shiftY += this.transformValues.imageOffsetY;
+          }
+          
+          // Изменяем размер изображения пропорционально
+          if (this.transformValues.imageSize !== 1) {
+            const aspect = selectedLayer.img.width / selectedLayer.img.height;
+            const baseHeight = 0.5 * this.transformValues.imageSize; // базовая высота * множитель
+            const baseWidth = baseHeight * aspect;
+            
+            selectedLayer.width = baseWidth;
+            selectedLayer.height = baseHeight;
+          }
+        }
+       
+       // Сохраняем состояние после трансформации
+       this.saveState();
+       
+       // Сохраняем текущие значения
+       this.savedTransformValues = { ...this.transformValues };
+       
+       // Сбрасываем окно трансформации
+       this.showTransformWindow = false;
+       
+       // Сбрасываем кнопку
+       this.canApplyTransform = false;
+       
+             // Показываем уведомление об успешной трансформации
+      console.log('Трансформация применена успешно');
+    },
+    
+    // Парсинг .blk файлов
+    parseBlkFile(content) {
+      try {
+        // Очищаем текущие слои
+        this.layers = [];
+        
+        // Создаем слои для линий и многоугольников
+        const linesLayer = {
+          id: 'linesLayer',
+          name: 'Линии',
+          type: 'lines',
+          lines: [],
+          img: null,
+          width: 1,
+          height: 1,
+          shiftX: 0,
+          shiftY: 0,
+          opacity: 1
+        };
+        
+        const polygonsLayer = {
+          id: 'polygonsLayer',
+          name: 'Многоугольники',
+          type: 'polygons',
+          polygons: [],
+          img: null,
+          width: 1,
+          height: 1,
+          shiftX: 0,
+          shiftY: 0,
+          opacity: 1
+        };
+        
+        const parsedLines = [];
+        const parsedPolygons = [];
+        
+        // Парсим содержимое файла
+        const fileLines = content.split('\n');
+        
+        for (let i = 0; i < fileLines.length; i++) {
+          const line = fileLines[i].trim();
+          
+          // Парсим линии
+          if (line.startsWith('line {') && line.includes('line:p4=')) {
+            const match = line.match(/line:p4=([^;]+)/);
+            if (match) {
+              const coords = match[1].split(',').map(Number);
+              if (coords.length === 4) {
+                parsedLines.push({
+                  points: [
+                    { x: coords[0], y: coords[1] },
+                    { x: coords[2], y: coords[3] }
+                  ]
+                });
+              }
+            }
+          }
+          
+          // Парсим четырехугольники
+          if (line.startsWith('quad {') && line.includes('tl:p2=')) {
+            const tlMatch = line.match(/tl:p2=([^;]+)/);
+            const trMatch = line.match(/tr:p2=([^;]+)/);
+            const brMatch = line.match(/br:p2=([^;]+)/);
+            const blMatch = line.match(/bl:p2=([^;]+)/);
+            
+            if (tlMatch && trMatch && brMatch && blMatch) {
+              const tl = tlMatch[1].split(',').map(Number);
+              const tr = trMatch[1].split(',').map(Number);
+              const br = brMatch[1].split(',').map(Number);
+              const bl = blMatch[1].split(',').map(Number);
+              
+              if (tl.length === 2 && tr.length === 2 && br.length === 2 && bl.length === 2) {
+                parsedPolygons.push({
+                  points: [
+                    { x: tl[0], y: tl[1] },
+                    { x: tr[0], y: tr[1] },
+                    { x: br[0], y: br[1] },
+                    { x: bl[0], y: bl[1] }
+                  ]
+                });
+              }
+            }
+          }
+        }
+        
+        // Добавляем линии в слой
+        if (parsedLines.length > 0) {
+          linesLayer.lines = parsedLines;
+          this.layers.push(linesLayer);
+        }
+        
+        // Добавляем многоугольники в слой
+        if (parsedPolygons.length > 0) {
+          polygonsLayer.polygons = parsedPolygons;
+          this.layers.push(polygonsLayer);
+        }
+        
+        // Сохраняем состояние
+        this.saveState();
+        
+        console.log(`Загружено из .blk: ${parsedLines.length} линий, ${parsedPolygons.length} многоугольников`);
+        
+      } catch (error) {
+        console.error('Ошибка парсинга .blk файла:', error);
+        alert('Ошибка при загрузке .blk файла: ' + error.message);
+      }
+    }
   },
   watch: {
     tool(newTool, oldTool) {
@@ -2156,6 +2629,13 @@ export default {
       const hasTemporaryObjects = this.isDrawingLine || this.isDrawingPolygon;
       
       return !hasImages && !hasLines && !hasPolygons && !hasTemporaryObjects;
+    },
+    
+    // Определяем выбранный слой с изображением для коррекции
+    selectedImageLayer() {
+      if (!this.selectedLayerId) return null;
+      const layer = this.layers.find(l => l.id === this.selectedLayerId);
+      return layer && layer.img ? layer : null;
     }
   }
 };
@@ -2373,5 +2853,296 @@ a {
 
 .autosave-text {
   white-space: nowrap;
+}
+
+.transform-window {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: #23272f;
+  border: 1px solid #ffd700;
+  border-radius: 10px;
+  padding: 20px;
+  z-index: 1001;
+  width: 350px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+
+.transform-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #ffd700;
+  padding-bottom: 10px;
+}
+
+.transform-header h3 {
+  color: #ffd700;
+  margin: 0;
+  font-size: 1.2em;
+}
+
+.transform-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.transform-section {
+  border: 1px solid #ffd700;
+  border-radius: 8px;
+  padding: 15px;
+  background: rgba(255, 215, 0, 0.05);
+}
+
+.transform-section h4 {
+  color: #ffd700;
+  margin: 0 0 15px 0;
+  font-size: 1em;
+  border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+  padding-bottom: 8px;
+}
+
+.transform-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.transform-field:last-child {
+  margin-bottom: 0;
+}
+
+.transform-field label {
+  color: #ffd700;
+  font-weight: 500;
+  min-width: 80px;
+}
+
+.transform-field input[type="number"] {
+  background: #181a20;
+  color: #ffd700;
+  border: 1px solid #ffd700;
+  border-radius: 5px;
+  padding: 8px 12px;
+  width: 120px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.transform-field input[type="number"]:focus {
+  outline: none;
+  border-color: #ffd700;
+  box-shadow: 0 0 5px rgba(255, 215, 0, 0.3);
+}
+
+.apply-btn {
+  background: #ffd700;
+  color: #23272f;
+  border: none;
+  border-radius: 5px;
+  padding: 12px 20px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.apply-btn:hover:not(:disabled) {
+  background: #e6c200;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+}
+
+.apply-btn:disabled {
+  background: #666;
+  color: #999;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.close-btn {
+  background: transparent;
+  color: #ffd700;
+  border: 1px solid #ffd700;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn:hover {
+  background: #ffd700;
+  color: #23272f;
+}
+
+/* Стили для окна справки */
+.help-modal-window {
+  background: #23272f;
+  border: 2px solid #ffd700;
+  border-radius: 12px;
+  width: 90vw;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+
+.help-header {
+  background: linear-gradient(135deg, #ffd700, #e6c200);
+  color: #23272f;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #ffd700;
+}
+
+.help-header h3 {
+  margin: 0;
+  font-size: 1.4em;
+  font-weight: 700;
+}
+
+.help-close-btn {
+  background: transparent;
+  color: #23272f;
+  border: 2px solid #23272f;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.help-close-btn:hover {
+  background: #23272f;
+  color: #ffd700;
+  transform: scale(1.1);
+}
+
+.help-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  max-height: calc(80vh - 140px);
+}
+
+.help-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.help-content::-webkit-scrollbar-track {
+  background: #181a20;
+  border-radius: 4px;
+}
+
+.help-content::-webkit-scrollbar-thumb {
+  background: #ffd700;
+  border-radius: 4px;
+}
+
+.help-content::-webkit-scrollbar-thumb:hover {
+  background: #e6c200;
+}
+
+.help-section {
+  margin-bottom: 25px;
+  padding: 15px;
+  background: rgba(255, 215, 0, 0.05);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 8px;
+}
+
+.help-section:last-child {
+  margin-bottom: 0;
+}
+
+.help-section h4 {
+  color: #ffd700;
+  margin: 0 0 15px 0;
+  font-size: 1.2em;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+  padding-bottom: 8px;
+}
+
+.help-section ul {
+  margin: 0;
+  padding-left: 20px;
+  list-style: none;
+}
+
+.help-section ul li {
+  color: #f8f8f8;
+  margin-bottom: 8px;
+  line-height: 1.5;
+  position: relative;
+  padding-left: 15px;
+}
+
+.help-section ul li:before {
+  content: "•";
+  color: #ffd700;
+  font-weight: bold;
+  position: absolute;
+  left: 0;
+}
+
+.help-section ul li:last-child {
+  margin-bottom: 0;
+}
+
+.help-section ul li b {
+  color: #ffd700;
+  font-weight: 600;
+}
+
+.help-footer {
+  background: #181a20;
+  padding: 20px;
+  border-top: 1px solid rgba(255, 215, 0, 0.3);
+  text-align: center;
+}
+
+.help-close-button {
+  background: linear-gradient(135deg, #ffd700, #e6c200);
+  color: #23272f;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 30px;
+  font-size: 1.1em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+}
+
+.help-close-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
+}
+
+.help-close-button:active {
+  transform: translateY(0);
 }
 </style>
